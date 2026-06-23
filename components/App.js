@@ -392,7 +392,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
   const grupListe=suppliers.filter(t=>kumasci?t.grup==="kumasci":t.grup!=="kumasci");
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",tur:kumasci?"Kumaşçı":"Lastikçi",acilis:""});
-  const [mg,setMg]=useState({tedId:"",desc:"",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:""});
+  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:""});
   const [detay,setDetay]=useState(null); const [filtre,setFiltre]=useState("hepsi");
   const turOnerileri=Array.from(new Set([...TEDARIKCI_TURLERI, ...grupListe.map(s=>s.tur).filter(Boolean)]));
   const mevcutTurler=Array.from(new Set(grupListe.map(s=>s.tur||"Diğer")));
@@ -415,12 +415,31 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-xl border p-4" style={{background:C.surface,borderColor:C.hair}}>
           <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{color:C.inkSoft}}>Mal Girişi (alım)</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={mg.tedId} onChange={e=>setMg({...mg,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.map(t=><option key={t.id} value={t.id}>{t.ad}{kumasci?"":` · ${t.tur||"Diğer"}`}</option>)}</select></div>
-            <Inp label="Açıklama" v={mg.desc} set={v=>setMg({...mg,desc:v})} cls="col-span-2"/><Inp label="Tutar ₺" v={mg.tutar} set={v=>setMg({...mg,tutar:v})} num/>
-            <div><Lbl>Ödeme</Lbl><select value={mg.odeme} onChange={e=>setMg({...mg,odeme:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="veresiye">Veresiye</option><option value="peşin">Peşin</option></select></div>
-          </div>
-          <button onClick={async()=>{await A.purchase(mg.tedId,mg.desc,parse(mg.tutar),mg.odeme); setMg({tedId:"",desc:"",tutar:"",odeme:mg.odeme});}} className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white" style={{background:C.ink}}>Mal Girişi Kaydet</button>
+          {(()=>{
+            const adetN=parse(mg.adet), birimN=parse(mg.birim);
+            const otoTutar=(adetN>0&&birimN>0)?adetN*birimN:0;
+            const efTutar=otoTutar>0?otoTutar:parse(mg.tutar);
+            const acikla=()=>{ let s=mg.is.trim()||"Mal girişi"; if(adetN>0&&birimN>0) s+=` · ${sayi(adetN)} adet × ${tl(birimN)}`; else if(adetN>0) s+=` · ${sayi(adetN)} adet`; return s; };
+            const kaydet=async()=>{ if(!mg.tedId||efTutar<=0) return; await A.purchase(mg.tedId,acikla(),efTutar,mg.odeme); setMg({tedId:"",is:"",adet:"",birim:"",tutar:"",odeme:mg.odeme}); };
+            return (<>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={mg.tedId} onChange={e=>setMg({...mg,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.map(t=><option key={t.id} value={t.id}>{t.ad}{kumasci?"":` · ${t.tur||"Diğer"}`}</option>)}</select></div>
+                <div className="col-span-2"><Lbl>İş / Ürün (ne için?)</Lbl><input value={mg.is} onChange={e=>setMg({...mg,is:e.target.value})} placeholder="ör. Tişört dikimi, kumaş baskı, fason dikim" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+                <Inp label="Adet (ops.)" v={mg.adet} set={v=>setMg({...mg,adet:v})} num/>
+                <Inp label="Birim ₺ (ops.)" v={mg.birim} set={v=>setMg({...mg,birim:v})} num/>
+                <div>
+                  <Lbl>{otoTutar>0?"Tutar ₺ (otomatik)":"Tutar ₺"}</Lbl>
+                  {otoTutar>0
+                    ? <div className="w-full rounded-lg px-3 py-2 text-sm tabular-nums font-semibold" style={{border:`1px solid ${C.hair}`,background:C.paper,color:C.ink}}>{tl(otoTutar)}</div>
+                    : <input value={mg.tutar} onChange={e=>setMg({...mg,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>}
+                  {efTutar>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ {dov(efTutar,kur)}</div>}
+                </div>
+                <div><Lbl>Ödeme</Lbl><select value={mg.odeme} onChange={e=>setMg({...mg,odeme:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="veresiye">Veresiye</option><option value="peşin">Peşin</option></select></div>
+              </div>
+              {(mg.is.trim()||adetN>0)&&<div className="mt-2 text-xs rounded-lg px-3 py-2" style={{background:C.paper,color:C.inkSoft}}>Kayda geçecek: <b style={{color:C.ink}}>{acikla()}</b></div>}
+              <button onClick={kaydet} disabled={!mg.tedId||efTutar<=0} className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50" style={{background:C.ink}}>Mal Girişi Kaydet</button>
+            </>);
+          })()}
         </div>
         <div className="rounded-xl border p-4" style={{background:C.surface,borderColor:C.hair}}>
           <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{color:C.inkSoft}}>Borç Ödeme</h3>
