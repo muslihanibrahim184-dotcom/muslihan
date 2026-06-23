@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v21"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v22"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -52,14 +52,25 @@ export default function App({ session }) {
     catch(e){ const m=e.message||"İşlem başarısız"; alert(m); return null; }
     finally{ busyRef.current=false; setBusy(false); } };
 
-  // Otomatik yenileme: uygulamaya dönünce + her 12 sn'de bir (işlem yokken)
+  // Otomatik yenileme: uygulamaya dönünce + her 5 sn'de bir (işlem yokken)
   useEffect(()=>{
     const tazele=()=>{ if(document.visibilityState==="visible" && !busyRef.current) refresh(); };
     document.addEventListener("visibilitychange", tazele);
     window.addEventListener("focus", tazele);
-    const id=setInterval(tazele, 12000);
+    const id=setInterval(tazele, 5000);
     return ()=>{ document.removeEventListener("visibilitychange", tazele); window.removeEventListener("focus", tazele); clearInterval(id); };
   },[refresh]);
+
+  // Aşağı çekerek yenileme (pull-to-refresh)
+  const [ptr,setPtr]=useState(0); const [ptrYukle,setPtrYukle]=useState(false);
+  const ptrStart=useRef(null); const ptrAktif=useRef(false);
+  const onTouchStart=(e)=>{ if((window.scrollY||0)<=0 && !busyRef.current){ ptrStart.current=e.touches[0].clientY; ptrAktif.current=true; } else { ptrAktif.current=false; } };
+  const onTouchMove=(e)=>{ if(!ptrAktif.current||ptrStart.current==null) return;
+    const dy=e.touches[0].clientY-ptrStart.current;
+    if(dy>0 && (window.scrollY||0)<=0){ setPtr(Math.min(dy*0.5,80)); } else { setPtr(0); } };
+  const onTouchEnd=async()=>{ if(!ptrAktif.current){ setPtr(0); return; }
+    if(ptr>55){ setPtrYukle(true); setPtr(46); try{ await refresh(); }finally{ setPtrYukle(false); } }
+    setPtr(0); ptrAktif.current=false; ptrStart.current=null; };
 
   if(hata && !data) return <Merkez><p style={{color:C.gider}}>{hata}</p><p className="text-sm mt-2" style={{color:C.inkSoft}}>SQL şemasını çalıştırdığınızdan emin olun.</p></Merkez>;
   if(!data || !rol) return <Merkez><Loader2 className="animate-spin" color={C.ink}/></Merkez>;
@@ -106,8 +117,13 @@ export default function App({ session }) {
   const aktif = SEKMELER.some(s=>s.k===sekme) ? sekme : SEKMELER[0].k;
 
   return (
-    <div style={{background:C.paper,color:C.ink,minHeight:"100vh"}}>
-      <div className="mx-auto max-w-6xl px-4 sm:px-5 py-6">
+    <div style={{background:C.paper,color:C.ink,minHeight:"100vh"}} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      <div style={{height:ptr,overflow:"hidden",transition:ptrAktif.current?"none":"height 0.25s",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <span className="flex items-center gap-2 text-xs" style={{color:C.inkSoft}}>
+          {ptrYukle? <><Loader2 size={14} className="animate-spin"/> Yenileniyor…</> : ptr>55? "↑ Bırak, yenilensin" : ptr>0? "↓ Yenilemek için çek" : ""}
+        </span>
+      </div>
+      <div className="mx-auto max-w-6xl px-4 sm:px-5 py-6" style={{transition:ptrAktif.current?"none":"transform 0.25s"}}>
         <header className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg" style={{background:C.ink}}><ShoppingCart size={20} color={C.paper}/></div>
