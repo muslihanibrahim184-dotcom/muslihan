@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v20"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v21"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -51,6 +51,15 @@ export default function App({ session }) {
     try{ const res=await fn(); await refresh(); return res; }
     catch(e){ const m=e.message||"İşlem başarısız"; alert(m); return null; }
     finally{ busyRef.current=false; setBusy(false); } };
+
+  // Otomatik yenileme: uygulamaya dönünce + her 12 sn'de bir (işlem yokken)
+  useEffect(()=>{
+    const tazele=()=>{ if(document.visibilityState==="visible" && !busyRef.current) refresh(); };
+    document.addEventListener("visibilitychange", tazele);
+    window.addEventListener("focus", tazele);
+    const id=setInterval(tazele, 12000);
+    return ()=>{ document.removeEventListener("visibilitychange", tazele); window.removeEventListener("focus", tazele); clearInterval(id); };
+  },[refresh]);
 
   if(hata && !data) return <Merkez><p style={{color:C.gider}}>{hata}</p><p className="text-sm mt-2" style={{color:C.inkSoft}}>SQL şemasını çalıştırdığınızdan emin olun.</p></Merkez>;
   if(!data || !rol) return <Merkez><Loader2 className="animate-spin" color={C.ink}/></Merkez>;
