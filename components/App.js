@@ -597,8 +597,13 @@ function Kullanicilar({me}){
 // === DÖVİZ KURU =============================================================
 function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
   const [duzenle,setDuzenle]=useState(false); const [tmp,setTmp]=useState({usd:"",eur:""});
-  const [cev,setCev]=useState(""); // çevirici girişi (TL)
-  const cevTL=parse(cev);
+  const [cev,setCev]=useState(""); // çevirici girişi (tutar)
+  const [cevPb,setCevPb]=useState("TL"); // giriş para birimi: TL | USD | EUR
+  const cevAmt=parse(cev);
+  const tabanTL = cevPb==="USD" ? cevAmt*kur.usd : cevPb==="EUR" ? cevAmt*kur.eur : cevAmt;
+  const cevVal={TL:tabanTL, USD:tabanTL/kur.usd, EUR:tabanTL/kur.eur};
+  const cevSym={TL:"₺", USD:"$", EUR:"€"};
+  const cevRenk={TL:C.ink, USD:C.gelir, EUR:C.gold};
   const fmt=(n)=>Number(n).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const kaydet=()=>{ onElle(parse(tmp.usd)||kur.usd,parse(tmp.eur)||kur.eur); setDuzenle(false); };
   const acD=()=>{ setTmp({usd:kur.usd.toFixed(2).replace(".",","),eur:kur.eur.toFixed(2).replace(".",",")}); setDuzenle(true); };
@@ -619,18 +624,25 @@ function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
       <button onClick={acD} className="flex items-center justify-center rounded-full border h-7 w-7" style={{borderColor:C.hair,background:C.surface,color:C.inkSoft}}><Pencil size={12}/></button>
       <span className="text-xs" style={{color:C.inkSoft}}>{eK}</span>
 
-      {/* Anlık çevirici: TL yaz → $/€ gör */}
-      <div className="flex items-center gap-2 rounded-full border pl-3 pr-2 py-1" style={{borderColor:C.gold,background:C.goldBg}}>
+      {/* Anlık çevirici: para birimi seç → diğerlerini gör */}
+      <div className="flex items-center gap-2 rounded-full border pl-2.5 pr-2.5 py-1" style={{borderColor:C.gold,background:C.goldBg}}>
         <ArrowRightLeft size={13} color={C.gold}/>
-        <span className="text-xs font-medium" style={{color:C.inkSoft}}>Çevir</span>
+        <div className="flex gap-1">
+          {["TL","USD","EUR"].map(k=>(
+            <button key={k} onClick={()=>setCevPb(k)} className="h-7 w-7 rounded-full text-sm font-bold leading-none"
+              style={{background:cevPb===k?C.ink:C.surface,color:cevPb===k?"#fff":C.inkSoft,border:`1px solid ${cevPb===k?C.ink:C.hair}`}}>{cevSym[k]}</button>
+          ))}
+        </div>
         <div className="relative">
           <input value={cev} onChange={e=>setCev(e.target.value)} inputMode="decimal" placeholder="0"
-            className="w-28 rounded-full pl-3 pr-6 py-1.5 text-sm font-semibold outline-none tabular-nums text-right"
+            className="w-24 rounded-full pl-3 pr-6 py-1.5 text-sm font-semibold outline-none tabular-nums text-right"
             style={{border:`1px solid ${C.hair}`,background:C.surface,color:C.ink}}/>
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft,pointerEvents:"none"}}>₺</span>
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft,pointerEvents:"none"}}>{cevSym[cevPb]}</span>
         </div>
-        <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:C.gelir}}>${fmt(cevTL/kur.usd)}</span>
-        <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:C.gold}}>€{fmt(cevTL/kur.eur)}</span>
+        <span className="text-sm font-semibold" style={{color:C.inkSoft}}>=</span>
+        {["TL","USD","EUR"].filter(k=>k!==cevPb).map(k=>(
+          <span key={k} className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:cevRenk[k]}}>{cevSym[k]}{fmt(cevVal[k])}</span>
+        ))}
       </div>
     </div>
   );
