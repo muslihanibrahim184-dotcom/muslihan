@@ -66,10 +66,10 @@ export default function App({ session }) {
   const verilenCek=cheques.filter(c=>c.tip==="verilen"&&c.durum==="Beklemede").reduce((a,b)=>a+N(b.tutar),0);
 
   const A={
-    sale:async({urunId,adet,musteriId,odeme})=>{ const urun=products.find(p=>p.id===urunId); if(!urun) return "Ürün seçin";
+    sale:async({urunId,adet,musteriId,odeme,birimFiyat})=>{ const urun=products.find(p=>p.id===urunId); if(!urun) return "Ürün seçin";
       if(adet<=0) return "Adet girin"; if(adet>N(urun.stok)) return `Stok yetersiz (mevcut ${N(urun.stok)})`;
       if(odeme==="veresiye"&&!musteriId) return "Veresiye için müşteri seçin";
-      const musteri=customers.find(m=>m.id===musteriId)||null; await run(()=>db.recordSale({urun,adet,musteri,odeme})); return null; },
+      const musteri=customers.find(m=>m.id===musteriId)||null; await run(()=>db.recordSale({urun,adet,musteri,odeme,birimFiyat})); return null; },
     deleteSale:(s)=>run(()=>db.deleteSale(s,products,customers)),
     addProduct:(p)=>run(()=>db.addProduct(p)), updateProduct:(id,patch)=>run(()=>db.updateProduct(id,patch)), deleteProduct:(id)=>run(()=>db.deleteProduct(id)),
     addCustomer:(c)=>run(()=>db.addCustomer(c)), updateCustomer:(id,patch)=>run(()=>db.updateCustomer(id,patch)), deleteCustomer:(id)=>run(()=>db.deleteCustomer(id)),
@@ -89,7 +89,7 @@ export default function App({ session }) {
     {k:"ted",l:"Tedarikçiler",I:Scissors},
     {k:"cek",l:"Çek / Senet",I:ScrollText},
   ];
-  let SEKMELER = rol==="tedarik" ? TUM.filter(s=>s.k==="kumasci"||s.k==="ted") : [...TUM];
+  let SEKMELER = rol==="tedarik" ? TUM.filter(s=>s.k==="kumasci"||s.k==="ted"||s.k==="cek") : [...TUM];
   if(rol==="admin") SEKMELER=[...SEKMELER,{k:"kullanicilar",l:"Kullanıcılar",I:UserCog}];
   const aktif = SEKMELER.some(s=>s.k===sekme) ? sekme : SEKMELER[0].k;
 
@@ -188,22 +188,27 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
 
 // === SATIŞ ==================================================================
 function Satis({products,customers,sales,kur,A,canDelete}){
-  const [f,setF]=useState({urunId:"",adet:"",musteriId:"",odeme:"peşin"}); const [hata,setHata]=useState("");
+  const [f,setF]=useState({urunId:"",adet:"",fiyat:"",musteriId:"",odeme:"peşin"}); const [hata,setHata]=useState("");
   const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:"",adres:""});
+  const toTr=(n)=>String(n).replace(".",",");
   const u=products.find(x=>x.id===f.urunId); const adet=parseInt(f.adet)||0;
-  const onizleme=u?{tutar:adet*N(u.satis),kar:adet*(N(u.satis)-N(u.giris))}:null;
-  const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",musteriId:"",odeme:f.odeme}); };
+  const birim=parse(f.fiyat)||N(u?.satis);
+  const fiyatDegisti=u&&birim>0&&birim!==N(u.satis);
+  const onizleme=u?{tutar:adet*birim,kar:adet*(birim-N(u.giris))}:null;
+  const urunSec=(id)=>{ const p=products.find(x=>x.id===id); setF({...f,urunId:id,fiyat:p?toTr(p.satis):""}); };
+  const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme,birimFiyat:birim}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",fiyat:"",musteriId:"",odeme:f.odeme}); };
   const yeniMusteri=async()=>{ if(!yeniM.ad.trim())return; const m=await A.addCustomer({ad:yeniM.ad.trim(),telefon:yeniM.telefon.trim(),adres:yeniM.adres.trim(),vergi_no:"",notu:"",bakiye:0}); if(m){ setF(s=>({...s,musteriId:m.id})); setYeniAc(false); setYeniM({ad:"",telefon:"",adres:""}); } };
   const liste=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1));
   return (
     <div className="space-y-5">
       <div className="rounded-xl border p-4 sm:p-5" style={{background:C.surface,borderColor:C.hair}}>
         <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider mb-4" style={{color:C.inkSoft}}><Receipt size={15}/> Yeni Satış</h2>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-2"><Lbl>Ürün</Lbl>
-            <select value={f.urunId} onChange={e=>setF({...f,urunId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>
+            <select value={f.urunId} onChange={e=>urunSec(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>
               <option value="">Ürün seçin...</option>{products.map(x=><option key={x.id} value={x.id} disabled={N(x.stok)<=0}>{x.ad} — {tl(x.satis)} (stok {sayi(x.stok)})</option>)}</select></div>
           <div><Lbl>Adet</Lbl><input value={f.adet} onChange={e=>setF({...f,adet:e.target.value})} inputMode="numeric" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div><Lbl>Birim Fiyat ₺</Lbl><input value={f.fiyat} onChange={e=>setF({...f,fiyat:e.target.value})} inputMode="decimal" placeholder={u?toTr(u.satis):"0"} className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${fiyatDegisti?C.gold:C.hair}`,background:C.paper}}/></div>
           <div><div className="flex items-center justify-between"><Lbl>Müşteri</Lbl><button onClick={()=>setYeniAc(!yeniAc)} className="text-xs font-medium mb-1.5" style={{color:C.gelir}}>+ Yeni</button></div>
             <select value={f.musteriId} onChange={e=>setF({...f,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>
             <option value="">Peşin müşteri</option>{customers.map(m=><option key={m.id} value={m.id}>{m.ad}</option>)}</select></div>
@@ -218,7 +223,10 @@ function Satis({products,customers,sales,kur,A,canDelete}){
         </div>)}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
           <div className="flex items-center gap-4">
-            {onizleme&&adet>0&&<><span className="text-sm" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(onizleme.tutar)}</b> <span className="text-xs tabular-nums">({dov(onizleme.tutar,kur)})</span></span><span className="text-sm" style={{color:C.inkSoft}}>Kâr: <b style={{color:C.gelir}}>{tl(onizleme.kar)}</b></span></>}
+            {onizleme&&adet>0&&<>
+              <span className="text-sm" style={{color:C.inkSoft}}>Birim: <b style={{color:fiyatDegisti?C.gold:C.ink}}>{tl(birim)}</b>{fiyatDegisti&&<span className="text-xs" style={{color:C.inkSoft}}> (liste {tl(u.satis)})</span>}</span>
+              <span className="text-sm" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(onizleme.tutar)}</b> <span className="text-xs tabular-nums">({dov(onizleme.tutar,kur)})</span></span>
+              <span className="text-sm" style={{color:C.inkSoft}}>Kâr: <b style={{color:onizleme.kar>=0?C.gelir:C.gider}}>{tl(onizleme.kar)}</b></span></>}
             {hata&&<span className="text-sm font-medium" style={{color:C.gider}}>{hata}</span>}
           </div>
           <button onClick={yap} className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white" style={{background:C.gelir}}><Plus size={16}/> Satışı Kaydet</button>
@@ -633,32 +641,36 @@ function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
     </div>
   );
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-5">
-      <KurChip icon={<DollarSign size={14} color={C.gelir}/>} etiket="USD/TRY" deger={`₺${fmt(kur.usd)}`}/>
-      <KurChip icon={<Euro size={14} color={C.gold}/>} etiket="EUR/TRY" deger={`₺${fmt(kur.eur)}`}/>
-      <button onClick={onCek} className="flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium" style={{borderColor:C.hair,background:C.surface,color:C.inkSoft}}><RefreshCw size={13} className={durum==="yukleniyor"?"animate-spin":""}/> Yenile</button>
-      <button onClick={acD} className="flex items-center justify-center rounded-full border h-7 w-7" style={{borderColor:C.hair,background:C.surface,color:C.inkSoft}}><Pencil size={12}/></button>
-      <span className="text-xs" style={{color:C.inkSoft}}>{eK}</span>
+    <div className="mb-5 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <KurChip icon={<DollarSign size={14} color={C.gelir}/>} etiket="USD/TRY" deger={`₺${fmt(kur.usd)}`}/>
+        <KurChip icon={<Euro size={14} color={C.gold}/>} etiket="EUR/TRY" deger={`₺${fmt(kur.eur)}`}/>
+        <button onClick={onCek} className="flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium" style={{borderColor:C.hair,background:C.surface,color:C.inkSoft}}><RefreshCw size={13} className={durum==="yukleniyor"?"animate-spin":""}/> Yenile</button>
+        <button onClick={acD} className="flex items-center justify-center rounded-full border h-7 w-7" style={{borderColor:C.hair,background:C.surface,color:C.inkSoft}}><Pencil size={12}/></button>
+        <span className="text-xs" style={{color:C.inkSoft}}>{eK}</span>
+      </div>
 
-      {/* Anlık çevirici: para birimi seç → diğerlerini gör */}
-      <div className="flex items-center gap-2 rounded-full border pl-2.5 pr-2.5 py-1" style={{borderColor:C.gold,background:C.goldBg}}>
-        <ArrowRightLeft size={13} color={C.gold}/>
-        <div className="flex gap-1">
+      {/* Anlık çevirici: para birimi seç → diğerlerini gör (telefonda sarar) */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border p-2" style={{borderColor:C.gold,background:C.goldBg}}>
+        <ArrowRightLeft size={14} color={C.gold} className="shrink-0"/>
+        <div className="flex gap-1 shrink-0">
           {["TL","USD","EUR"].map(k=>(
-            <button key={k} onClick={()=>setCevPb(k)} className="h-7 w-7 rounded-full text-sm font-bold leading-none"
+            <button key={k} onClick={()=>setCevPb(k)} className="h-8 w-8 rounded-full text-sm font-bold leading-none"
               style={{background:cevPb===k?C.ink:C.surface,color:cevPb===k?"#fff":C.inkSoft,border:`1px solid ${cevPb===k?C.ink:C.hair}`}}>{cevSym[k]}</button>
           ))}
         </div>
-        <div className="relative">
-          <input value={cev} onChange={e=>setCev(e.target.value)} inputMode="decimal" placeholder="0"
-            className="w-24 rounded-full pl-3 pr-6 py-1.5 text-sm font-semibold outline-none tabular-nums text-right"
+        <div className="relative flex-1 min-w-[110px]">
+          <input value={cev} onChange={e=>setCev(e.target.value)} inputMode="decimal" placeholder="Tutar girin"
+            className="w-full rounded-full pl-3 pr-7 py-2 text-sm font-semibold outline-none tabular-nums text-right"
             style={{border:`1px solid ${C.hair}`,background:C.surface,color:C.ink}}/>
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft,pointerEvents:"none"}}>{cevSym[cevPb]}</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft,pointerEvents:"none"}}>{cevSym[cevPb]}</span>
         </div>
-        <span className="text-sm font-semibold" style={{color:C.inkSoft}}>=</span>
-        {["TL","USD","EUR"].filter(k=>k!==cevPb).map(k=>(
-          <span key={k} className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:cevRenk[k]}}>{cevSym[k]}{fmt(cevVal[k])}</span>
-        ))}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-semibold" style={{color:C.inkSoft}}>=</span>
+          {["TL","USD","EUR"].filter(k=>k!==cevPb).map(k=>(
+            <span key={k} className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:cevRenk[k]}}>{cevSym[k]}{fmt(cevVal[k])}</span>
+          ))}
+        </div>
       </div>
     </div>
   );

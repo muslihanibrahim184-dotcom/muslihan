@@ -138,8 +138,8 @@ alter table profiles           enable row level security;
 do $$
 declare t text;
 begin
-  -- admin+editor görür/ekler/günceller, admin siler  (müşteri/satış/ürün/çek/kasa)
-  foreach t in array array['products','customers','sales','collections','cheques']
+  -- admin+editor görür/ekler/günceller, admin siler  (müşteri/satış/ürün)
+  foreach t in array array['products','customers','sales','collections']
   loop
     execute format('drop policy if exists sel on %I;', t);
     execute format('drop policy if exists ins on %I;', t);
@@ -151,8 +151,8 @@ begin
     execute format($f$create policy del on %I for delete to authenticated using (public.user_role() = 'admin');$f$, t);
   end loop;
 
-  -- kumaşçı/tedarikçi + hareketleri: admin+editor+tedarik görür/ekler/günceller, admin siler
-  foreach t in array array['suppliers','supplier_movements']
+  -- kumaşçı/tedarikçi + hareketleri + çek/senet: admin+editor+tedarik görür/ekler/günceller, admin siler
+  foreach t in array array['suppliers','supplier_movements','cheques']
   loop
     execute format('drop policy if exists sel on %I;', t);
     execute format('drop policy if exists ins on %I;', t);
