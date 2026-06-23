@@ -620,16 +620,17 @@ function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
       <span className="text-xs" style={{color:C.inkSoft}}>{eK}</span>
 
       {/* Anlık çevirici: TL yaz → $/€ gör */}
-      <div className="flex items-center gap-2 rounded-full border pl-3 pr-1.5 py-1" style={{borderColor:C.hair,background:C.surface}}>
-        <ArrowRightLeft size={13} color={C.inkSoft}/>
+      <div className="flex items-center gap-2 rounded-full border pl-3 pr-2 py-1" style={{borderColor:C.gold,background:C.goldBg}}>
+        <ArrowRightLeft size={13} color={C.gold}/>
+        <span className="text-xs font-medium" style={{color:C.inkSoft}}>Çevir</span>
         <div className="relative">
           <input value={cev} onChange={e=>setCev(e.target.value)} inputMode="decimal" placeholder="0"
-            className="w-24 rounded-full pl-2.5 pr-5 py-1 text-sm font-semibold outline-none tabular-nums text-right"
-            style={{border:`1px solid ${C.hair}`,background:C.paper,color:C.ink}}/>
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft}}>₺</span>
+            className="w-28 rounded-full pl-3 pr-6 py-1.5 text-sm font-semibold outline-none tabular-nums text-right"
+            style={{border:`1px solid ${C.hair}`,background:C.surface,color:C.ink}}/>
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft,pointerEvents:"none"}}>₺</span>
         </div>
         <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:C.gelir}}>${fmt(cevTL/kur.usd)}</span>
-        <span className="text-sm font-semibold tabular-nums whitespace-nowrap pr-1" style={{color:C.gold}}>€{fmt(cevTL/kur.eur)}</span>
+        <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:C.gold}}>€{fmt(cevTL/kur.eur)}</span>
       </div>
     </div>
   );
