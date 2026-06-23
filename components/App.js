@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v6"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v7"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -404,7 +404,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
   const grupListe=suppliers.filter(t=>kumasci?t.grup==="kumasci":t.grup!=="kumasci");
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",tur:kumasci?"Kumaşçı":"Lastikçi",acilis:""});
-  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:""});
+  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",pb:"TL",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:""});
   const [detay,setDetay]=useState(null); const [filtre,setFiltre]=useState("hepsi");
   const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({ad:"",tur:""});
   const bilgiAc=()=>{ setBf({ad:detay.ad,tur:detay.tur||""}); setBilgiDuzenle(true); };
@@ -431,17 +431,31 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
         <div className="rounded-xl border p-4" style={{background:C.surface,borderColor:C.hair}}>
           <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{color:C.inkSoft}}>Mal Girişi (alım)</h3>
           {(()=>{
-            const adetN=parse(mg.adet), birimN=parse(mg.birim);
-            const otoTutar=(adetN>0&&birimN>0)?adetN*birimN:0;
+            const pb=mg.pb||"TL"; const sym={TL:"₺",USD:"$",EUR:"€"};
+            const adetN=parse(mg.adet), birimGiris=parse(mg.birim);
+            const birimTL = pb==="USD" ? birimGiris*kur.usd : pb==="EUR" ? birimGiris*kur.eur : birimGiris;
+            const otoTutar=(adetN>0&&birimTL>0)?adetN*birimTL:0;
             const efTutar=otoTutar>0?otoTutar:parse(mg.tutar);
-            const acikla=()=>{ let s=mg.is.trim()||"Mal girişi"; if(adetN>0&&birimN>0) s+=` · ${sayi(adetN)} adet × ${tl(birimN)}`; else if(adetN>0) s+=` · ${sayi(adetN)} adet`; return s; };
-            const kaydet=async()=>{ if(!mg.tedId||efTutar<=0) return; await A.purchase(mg.tedId,acikla(),efTutar,mg.odeme); setMg({tedId:"",is:"",adet:"",birim:"",tutar:"",odeme:mg.odeme}); };
+            const acikla=()=>{ let s=mg.is.trim()||"Mal girişi";
+              if(adetN>0&&birimGiris>0){ s+=` · ${sayi(adetN)} adet × ${sym[pb]}${mg.birim}`; if(pb!=="TL") s+=` (≈₺${d2(birimTL)})`; }
+              else if(adetN>0) s+=` · ${sayi(adetN)} adet`;
+              return s; };
+            const kaydet=async()=>{ if(!mg.tedId||efTutar<=0) return; await A.purchase(mg.tedId,acikla(),efTutar,mg.odeme); setMg({tedId:"",is:"",adet:"",birim:"",pb:mg.pb,tutar:"",odeme:mg.odeme}); };
             return (<>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={mg.tedId} onChange={e=>setMg({...mg,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.map(t=><option key={t.id} value={t.id}>{t.ad}{kumasci?"":` · ${t.tur||"Diğer"}`}</option>)}</select></div>
                 <div className="col-span-2"><Lbl>İş / Ürün (ne için?)</Lbl><input value={mg.is} onChange={e=>setMg({...mg,is:e.target.value})} placeholder="ör. Tişört dikimi, kumaş baskı, fason dikim" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
                 <Inp label="Adet (ops.)" v={mg.adet} set={v=>setMg({...mg,adet:v})} num/>
-                <Inp label="Birim ₺ (ops.)" v={mg.birim} set={v=>setMg({...mg,birim:v})} num/>
+                <div>
+                  <Lbl>Birim Fiyat (ops.)</Lbl>
+                  <div className="flex gap-1.5">
+                    <select value={pb} onChange={e=>setMg({...mg,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:pb!=="TL"?C.gold:C.ink}}>
+                      <option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option>
+                    </select>
+                    <input value={mg.birim} onChange={e=>setMg({...mg,birim:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+                  </div>
+                  {pb!=="TL"&&birimTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>birim ≈ ₺{d2(birimTL)}</div>}
+                </div>
                 <div>
                   <Lbl>{otoTutar>0?"Tutar ₺ (otomatik)":"Tutar ₺"}</Lbl>
                   {otoTutar>0
