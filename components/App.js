@@ -189,11 +189,11 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
 // === SATIŞ ==================================================================
 function Satis({products,customers,sales,kur,A,canDelete}){
   const [f,setF]=useState({urunId:"",adet:"",musteriId:"",odeme:"peşin"}); const [hata,setHata]=useState("");
-  const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:""});
+  const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:"",adres:""});
   const u=products.find(x=>x.id===f.urunId); const adet=parseInt(f.adet)||0;
   const onizleme=u?{tutar:adet*N(u.satis),kar:adet*(N(u.satis)-N(u.giris))}:null;
   const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",musteriId:"",odeme:f.odeme}); };
-  const yeniMusteri=async()=>{ if(!yeniM.ad.trim())return; const m=await A.addCustomer({ad:yeniM.ad.trim(),telefon:yeniM.telefon.trim(),adres:"",vergi_no:"",notu:"",bakiye:0}); if(m){ setF(s=>({...s,musteriId:m.id})); setYeniAc(false); setYeniM({ad:"",telefon:""}); } };
+  const yeniMusteri=async()=>{ if(!yeniM.ad.trim())return; const m=await A.addCustomer({ad:yeniM.ad.trim(),telefon:yeniM.telefon.trim(),adres:yeniM.adres.trim(),vergi_no:"",notu:"",bakiye:0}); if(m){ setF(s=>({...s,musteriId:m.id})); setYeniAc(false); setYeniM({ad:"",telefon:"",adres:""}); } };
   const liste=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1));
   return (
     <div className="space-y-5">
@@ -213,6 +213,7 @@ function Satis({products,customers,sales,kur,A,canDelete}){
         {yeniAc&&(<div className="mt-3 rounded-lg border p-3 flex flex-wrap items-end gap-3" style={{borderColor:C.hair,background:C.paper}}>
           <Inp label="Yeni müşteri adı" v={yeniM.ad} set={v=>setYeniM({...yeniM,ad:v})} cls="flex-1 min-w-[160px]"/>
           <Inp label="Telefon (ops.)" v={yeniM.telefon} set={v=>setYeniM({...yeniM,telefon:v})} cls="min-w-[140px]"/>
+          <Inp label="Adres (ops.)" v={yeniM.adres} set={v=>setYeniM({...yeniM,adres:v})} cls="flex-1 min-w-[200px]"/>
           <button onClick={yeniMusteri} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.ink}}>Müşteri Ekle & Seç</button>
         </div>)}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
