@@ -18,6 +18,9 @@ const dov=(a,kur)=>(!kur||!a)?"":`$${d2(a/kur.usd)} · €${d2(a/kur.eur)}`;
 const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
+const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
+const SURUM="v6"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
 const ROL_AD={admin:"Yönetici",editor:"Editör",tedarik:"Tedarik"};
@@ -55,7 +58,7 @@ export default function App({ session }) {
   const { products, customers, suppliers, sales, collections, supplierMov, cash, cheques } = data;
   const canDelete = rol==="admin";
   const stokDeger=products.reduce((a,b)=>a+N(b.stok)*N(b.giris),0);
-  const kritik=products.filter(u=>N(u.stok)<=N(u.min_stok)).length;
+  const kritik=products.filter(kritikMi).length;
   const toplamSatis=sales.reduce((a,b)=>a+N(b.tutar),0);
   const toplamKar=sales.reduce((a,b)=>a+N(b.kar),0);
   const musteriAlacak=customers.filter(m=>N(m.bakiye)>0).reduce((a,b)=>a+N(b.bakiye),0);
@@ -100,7 +103,7 @@ export default function App({ session }) {
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg" style={{background:C.ink}}><ShoppingCart size={20} color={C.paper}/></div>
             <div><h1 className="text-xl sm:text-2xl font-semibold tracking-tight" style={{fontFamily:"Georgia, serif"}}>Muslihan Tekstil</h1>
-              <p className="text-xs sm:text-sm" style={{color:C.inkSoft}}>Mağaza takip sistemi</p></div>
+              <p className="text-xs sm:text-sm" style={{color:C.inkSoft}}>Mağaza takip sistemi · <span style={{color:C.gold}}>{SURUM}</span></p></div>
           </div>
           <div className="flex items-center gap-2">
             {busy && <Loader2 size={16} className="animate-spin" color={C.inkSoft}/>}
@@ -137,7 +140,7 @@ export default function App({ session }) {
 // === GENEL BAKIŞ ============================================================
 function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,kumasciBorc,tedarikciBorc,alinanCek,verilenCek,cheques,sales,products,kur,git}){
   const sonSatis=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1)).slice(0,5);
-  const kritikler=products.filter(u=>N(u.stok)<=N(u.min_stok));
+  const kritikler=products.filter(kritikMi);
   const yaklasan=[...cheques].filter(c=>c.durum==="Portföyde"||c.durum==="Beklemede").sort((a,b)=>a.vade.localeCompare(b.vade)).slice(0,5);
   return (
     <div className="space-y-6">
@@ -278,7 +281,7 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
       <div className="relative max-w-xs"><Search size={15} color={C.inkSoft} className="absolute left-3 top-1/2 -translate-y-1/2"/>
         <input value={arama} onChange={e=>setArama(e.target.value)} placeholder="Ürün ara..." className="w-full rounded-lg pl-9 pr-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
       <Tablo><thead><Tr head><Th>Ürün</Th><Th>Kategori</Th><Th r>Stok</Th><Th r>Giriş</Th><Th r>Satış</Th><Th r>Birim Kâr</Th><Th r>Marj</Th><Th></Th></Tr></thead><tbody>
-        {goster.map(s=>{const dusuk=N(s.stok)<=N(s.min_stok),kar=N(s.satis)-N(s.giris),marj=N(s.satis)?Math.round(kar/N(s.satis)*100):0; return(
+        {goster.map(s=>{const dusuk=kritikMi(s),kar=N(s.satis)-N(s.giris),marj=N(s.satis)?Math.round(kar/N(s.satis)*100):0; return(
           <Tr key={s.id}>
             <Td><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}</div></Td>
             <Td><Rozet renk={C.gold} bg={C.goldBg}>{s.kategori}</Rozet></Td>
