@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v12"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v16"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -79,7 +79,7 @@ export default function App({ session }) {
     collect:(id,tutar)=>{ const m=customers.find(c=>c.id===id); if(!m||tutar<=0) return; return run(()=>db.collectFromCustomer(m,tutar)); },
     addSupplier:(s)=>run(()=>db.addSupplier(s)), updateSupplier:(id,patch)=>run(()=>db.updateSupplier(id,patch)), deleteSupplier:(id)=>run(()=>db.deleteSupplier(id)),
     purchase:(id,ac,tutar,odeme)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPurchase(t,ac,tutar,odeme)); },
-    pay:(id,tutar)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPay(t,tutar)); },
+    pay:(id,tutar,aciklama)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPay(t,tutar,aciklama)); },
     addCheque:(c)=>run(()=>db.addCheque(c)), deleteCheque:(id)=>run(()=>db.deleteCheque(id)), chequeStatus:(c,d)=>run(()=>db.setChequeStatus(c,d)),
   };
 
@@ -344,7 +344,7 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
 function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",telefon:"",adres:"",vergi_no:"",notu:"",acilis:""});
-  const [th,setTh]=useState({musteriId:"",tutar:""}); const [detay,setDetay]=useState(null);
+  const [th,setTh]=useState({musteriId:"",tutar:"",pb:"TL"}); const [detay,setDetay]=useState(null);
   const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({telefon:"",adres:"",vergi_no:"",notu:""});
   const yeni=async()=>{ if(!ny.ad.trim())return; await A.addCustomer({ad:ny.ad.trim(),telefon:ny.telefon.trim(),adres:ny.adres.trim(),vergi_no:ny.vergi_no.trim(),notu:ny.notu.trim(),bakiye:parse(ny.acilis)}); setNy({ad:"",telefon:"",adres:"",vergi_no:"",notu:"",acilis:""}); setAc(false); };
   const acDetay=(m)=>{ setBilgiDuzenle(false); setDetay(m); };
@@ -368,9 +368,20 @@ function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete})
       </div>)}
       <div className="rounded-xl border p-4 flex flex-wrap items-end gap-3" style={{background:C.surface,borderColor:C.hair}}>
         <div className="flex-1 min-w-[160px]"><Lbl>Tahsilat – Müşteri</Lbl><select value={th.musteriId} onChange={e=>setTh({...th,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>
-          <option value="">Seçin...</option>{customers.filter(m=>N(m.bakiye)>0).map(m=><option key={m.id} value={m.id}>{m.ad} ({tl(m.bakiye)})</option>)}</select></div>
-        <Inp label="Tutar ₺" v={th.tutar} set={v=>setTh({...th,tutar:v})} num cls="min-w-[120px]"/>
-        <button onClick={async()=>{await A.collect(th.musteriId,parse(th.tutar)); setTh({musteriId:"",tutar:""});}} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Tahsil Et</button>
+          <option value="">Seçin...</option>{customers.filter(m=>N(m.bakiye)>0).map(m=><option key={m.id} value={m.id}>{m.ad} — {tl(m.bakiye)} ({dov(N(m.bakiye),kur)})</option>)}</select></div>
+        <div className="min-w-[180px]"><Lbl>Tutar</Lbl>
+          {(()=>{
+            const thPb=th.pb||"TL"; const thCarpan=thPb==="USD"?kur.usd:thPb==="EUR"?kur.eur:1; const thTL=parse(th.tutar)*thCarpan;
+            return (<>
+              <div className="flex gap-1.5">
+                <select value={thPb} onChange={e=>setTh({...th,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${thPb!=="TL"?C.gold:C.hair}`,background:C.paper,color:thPb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+                <input value={th.tutar} onChange={e=>setTh({...th,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+              </div>
+              {thPb!=="TL"&&thTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(thTL)} tahsil</div>}
+            </>);
+          })()}
+        </div>
+        <button onClick={async()=>{const c=th.pb==="USD"?kur.usd:th.pb==="EUR"?kur.eur:1; await A.collect(th.musteriId,parse(th.tutar)*c); setTh({musteriId:"",tutar:"",pb:th.pb});}} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Tahsil Et</button>
       </div>
       <Tablo><thead><Tr head><Th>Müşteri</Th><Th>Telefon</Th><Th r>Bakiye</Th><Th r>Durum</Th><Th r>Aldığı Mal</Th><Th></Th></Tr></thead><tbody>
         {[...customers].sort((a,b)=>N(b.bakiye)-N(a.bakiye)).map(m=>{const mallar=sales.filter(s=>s.musteri_id===m.id); return(
@@ -435,7 +446,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
   const grupListe=suppliers.filter(t=>kumasci?t.grup==="kumasci":t.grup!=="kumasci");
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",tur:kumasci?"Kumaşçı":"Lastikçi",acilis:""});
-  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",pb:"TL",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:"",pb:"TL"});
+  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",pb:"TL",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:"",pb:"TL",not:""});
   const [detay,setDetay]=useState(null); const [filtre,setFiltre]=useState("hepsi");
   const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({ad:"",tur:""});
   const bilgiAc=()=>{ setBf({ad:detay.ad,tur:detay.tur||""}); setBilgiDuzenle(true); };
@@ -507,10 +518,12 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
             const odPb=od.pb||"TL"; const sym={TL:"₺",USD:"$",EUR:"€"};
             const odCarpan = odPb==="USD"?kur.usd : odPb==="EUR"?kur.eur : 1;
             const odTL = parse(od.tutar)*odCarpan;
-            const ode=async()=>{ if(!od.tedId||odTL<=0) return; await A.pay(od.tedId,odTL); setOd({tedId:"",tutar:"",pb:od.pb}); };
+            const acikla=()=>{ let s=(od.not||"").trim()||"Ödeme"; if(odPb!=="TL") s+=` · ${sym[odPb]}${od.tutar} (≈₺${d2(odTL)})`; return s; };
+            const ode=async()=>{ if(!od.tedId||odTL<=0) return; await A.pay(od.tedId,odTL,acikla()); setOd({tedId:"",tutar:"",pb:od.pb,not:""}); };
             return (<>
               <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={od.tedId} onChange={e=>setOd({...od,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.filter(t=>N(t.bakiye)>0).map(t=><option key={t.id} value={t.id}>{t.ad} ({tl(t.bakiye)})</option>)}</select></div>
+                <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={od.tedId} onChange={e=>setOd({...od,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.filter(t=>N(t.bakiye)>0).map(t=><option key={t.id} value={t.id}>{t.ad} — {tl(t.bakiye)} ({dov(N(t.bakiye),kur)})</option>)}</select></div>
+                <div className="col-span-2"><Lbl>Açıklama / Not (ops.)</Lbl><input value={od.not||""} onChange={e=>setOd({...od,not:e.target.value})} placeholder="ör. Triko kumaş ödemesi" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
                 <div className="col-span-2"><Lbl>Tutar</Lbl>
                   <div className="flex gap-1.5">
                     <select value={odPb} onChange={e=>setOd({...od,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${odPb!=="TL"?C.gold:C.hair}`,background:C.paper,color:odPb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
@@ -519,6 +532,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
                   {odPb!=="TL"&&odTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(odTL)} ödenecek</div>}
                 </div>
               </div>
+              {(od.tutar&&odTL>0)&&<div className="mt-2 text-xs rounded-lg px-3 py-2" style={{background:C.paper,color:C.inkSoft}}>Kayda geçecek: <b style={{color:C.ink}}>{acikla()}</b></div>}
               <button onClick={ode} disabled={!od.tedId||odTL<=0} className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50" style={{background:C.gelir}}>Ödeme Yap</button>
             </>);
           })()}
@@ -572,12 +586,15 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
 // === ÇEK / SENET ============================================================
 function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
-  const [f,setF]=useState({tip:"alinan",tur:"Çek",kisi:"",banka:"",tutar:"",vade:TODAY,notu:""}); const [filtre,setFiltre]=useState("hepsi");
+  const [f,setF]=useState({tip:"alinan",tur:"Çek",kisi:"",banka:"",tutar:"",pb:"TL",vade:TODAY,notu:""}); const [filtre,setFiltre]=useState("hepsi");
   const DURUMLAR={alinan:["Portföyde","Tahsil Edildi","Ciro Edildi","Karşılıksız"],verilen:["Beklemede","Ödendi","Karşılıksız"]};
   const dR=(d)=>({"Portföyde":C.gold,"Beklemede":C.gold,"Tahsil Edildi":C.gelir,"Ödendi":C.gelir,"Ciro Edildi":C.inkSoft,"Karşılıksız":C.gider}[d]||C.inkSoft);
   const dB=(d)=>({"Portföyde":C.goldBg,"Beklemede":C.goldBg,"Tahsil Edildi":C.gelirBg,"Ödendi":C.gelirBg,"Ciro Edildi":C.hair,"Karşılıksız":C.giderBg}[d]||C.hair);
   const kisiler=f.tip==="alinan"?customers:suppliers;
-  const ekle=async()=>{ if(!f.kisi.trim()||parse(f.tutar)<=0)return; await A.addCheque({tip:f.tip,tur:f.tur,kisi:f.kisi.trim(),banka:f.banka||"—",tutar:parse(f.tutar),vade:f.vade,durum:f.tip==="alinan"?"Portföyde":"Beklemede",notu:f.notu,islendi:false}); setF({tip:f.tip,tur:"Çek",kisi:"",banka:"",tutar:"",vade:TODAY,notu:""}); setAc(false); };
+  const ekle=async()=>{ if(!f.kisi.trim()||parse(f.tutar)<=0)return;
+    const c=f.pb==="USD"?kur.usd:f.pb==="EUR"?kur.eur:1; const tutarTL=parse(f.tutar)*c;
+    let notu=f.notu||""; if(f.pb!=="TL"){ const sym={TL:"₺",USD:"$",EUR:"€"}; const dn=`${sym[f.pb]}${f.tutar}`; notu=notu?`${notu} · ${dn}`:dn; }
+    await A.addCheque({tip:f.tip,tur:f.tur,kisi:f.kisi.trim(),banka:f.banka||"—",tutar:tutarTL,vade:f.vade,durum:f.tip==="alinan"?"Portföyde":"Beklemede",notu,islendi:false}); setF({tip:f.tip,tur:"Çek",kisi:"",banka:"",tutar:"",pb:f.pb,vade:TODAY,notu:""}); setAc(false); };
   const goster=[...cheques].filter(c=>filtre==="hepsi"||c.tip===filtre).sort((a,b)=>a.vade.localeCompare(b.vade));
   return (
     <div className="space-y-4">
@@ -594,7 +611,14 @@ function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDel
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div><Lbl>Tür</Lbl><select value={f.tur} onChange={e=>setF({...f,tur:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option>Çek</option><option>Senet</option></select></div>
           <div><Lbl>{f.tip==="alinan"?"Kimden":"Kime"}</Lbl><input list="cek-kisi" value={f.kisi} onChange={e=>setF({...f,kisi:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/><datalist id="cek-kisi">{kisiler.map(k=><option key={k.id} value={k.ad}/>)}</datalist></div>
-          <Inp label="Banka" v={f.banka} set={v=>setF({...f,banka:v})}/><Inp label="Tutar ₺" v={f.tutar} set={v=>setF({...f,tutar:v})} num/>
+          <Inp label="Banka" v={f.banka} set={v=>setF({...f,banka:v})}/>
+          <div><Lbl>Tutar</Lbl>
+            <div className="flex gap-1.5">
+              <select value={f.pb||"TL"} onChange={e=>setF({...f,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${(f.pb&&f.pb!=="TL")?C.gold:C.hair}`,background:C.paper,color:(f.pb&&f.pb!=="TL")?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+              <input value={f.tutar} onChange={e=>setF({...f,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+            </div>
+            {f.pb&&f.pb!=="TL"&&parse(f.tutar)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(f.tutar)*(f.pb==="USD"?kur.usd:kur.eur))}</div>}
+          </div>
           <div><Lbl>Vade</Lbl><input type="date" value={f.vade} onChange={e=>setF({...f,vade:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
           <Inp label="Açıklama" v={f.notu} set={v=>setF({...f,notu:v})} cls="col-span-2 md:col-span-3"/>
         </div>
