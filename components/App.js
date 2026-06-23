@@ -74,7 +74,7 @@ export default function App({ session }) {
     addProduct:(p)=>run(()=>db.addProduct(p)), updateProduct:(id,patch)=>run(()=>db.updateProduct(id,patch)), deleteProduct:(id)=>run(()=>db.deleteProduct(id)),
     addCustomer:(c)=>run(()=>db.addCustomer(c)), updateCustomer:(id,patch)=>run(()=>db.updateCustomer(id,patch)), deleteCustomer:(id)=>run(()=>db.deleteCustomer(id)),
     collect:(id,tutar)=>{ const m=customers.find(c=>c.id===id); if(!m||tutar<=0) return; return run(()=>db.collectFromCustomer(m,tutar)); },
-    addSupplier:(s)=>run(()=>db.addSupplier(s)), deleteSupplier:(id)=>run(()=>db.deleteSupplier(id)),
+    addSupplier:(s)=>run(()=>db.addSupplier(s)), updateSupplier:(id,patch)=>run(()=>db.updateSupplier(id,patch)), deleteSupplier:(id)=>run(()=>db.deleteSupplier(id)),
     purchase:(id,ac,tutar,odeme)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPurchase(t,ac,tutar,odeme)); },
     pay:(id,tutar)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPay(t,tutar)); },
     addCheque:(c)=>run(()=>db.addCheque(c)), deleteCheque:(id)=>run(()=>db.deleteCheque(id)), chequeStatus:(c,d)=>run(()=>db.setChequeStatus(c,d)),
@@ -395,6 +395,9 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
   const [ny,setNy]=useState({ad:"",tur:kumasci?"Kumaşçı":"Lastikçi",acilis:""});
   const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:""});
   const [detay,setDetay]=useState(null); const [filtre,setFiltre]=useState("hepsi");
+  const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({ad:"",tur:""});
+  const bilgiAc=()=>{ setBf({ad:detay.ad,tur:detay.tur||""}); setBilgiDuzenle(true); };
+  const bilgiKaydet=async()=>{ if(!bf.ad.trim())return; const patch=kumasci?{ad:bf.ad.trim()}:{ad:bf.ad.trim(),tur:bf.tur.trim()||"Diğer"}; await A.updateSupplier(detay.id,patch); setDetay({...detay,...patch}); setBilgiDuzenle(false); };
   const turOnerileri=Array.from(new Set([...TEDARIKCI_TURLERI, ...grupListe.map(s=>s.tur).filter(Boolean)]));
   const mevcutTurler=Array.from(new Set(grupListe.map(s=>s.tur||"Diğer")));
   const yeni=async()=>{ if(!ny.ad.trim())return; await A.addSupplier({ad:ny.ad.trim(),grup,tur:kumasci?"Kumaşçı":(ny.tur.trim()||"Diğer"),bakiye:parse(ny.acilis)}); setNy({ad:"",tur:ny.tur,acilis:""}); setAc(false); };
@@ -458,7 +461,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
       <Tablo><thead><Tr head><Th>{etiket}</Th>{!kumasci&&<Th>Tür</Th>}<Th r>Borç (Verecek)</Th><Th r>Durum</Th><Th r>Hareket</Th><Th></Th></Tr></thead><tbody>
         {goster.map(t=>{const h=supplierMov.filter(x=>x.supplier_id===t.id); return(
           <Tr key={t.id}>
-            <Td><button onClick={()=>setDetay(t)} className="font-medium underline-offset-2 hover:underline text-left">{t.ad}</button></Td>
+            <Td><button onClick={()=>{setBilgiDuzenle(false); setDetay(t);}} className="font-medium underline-offset-2 hover:underline text-left">{t.ad}</button></Td>
             {!kumasci&&<Td><Rozet renk={C.gold} bg={C.goldBg}>{t.tur||"Diğer"}</Rozet></Td>}
             <Td r mono bold style={{color:N(t.bakiye)>0?C.gider:C.inkSoft}}>{tl(Math.abs(N(t.bakiye)))}{N(t.bakiye)!==0&&<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(Math.abs(N(t.bakiye)),kur)}</div>}</Td>
             <Td r><span className="text-xs font-medium" style={{color:N(t.bakiye)>0?C.gider:C.gelir}}>{N(t.bakiye)>0?"Borçlusun":"Kapalı"}</span></Td>
@@ -473,6 +476,18 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
           <Ozetcik etiket="Güncel Borç" deger={tl(Math.abs(N(detay.bakiye)))} dov={dov(Math.abs(N(detay.bakiye)),kur)} renk={N(detay.bakiye)>0?C.gider:C.gelir}/>
           {!kumasci&&<Ozetcik etiket="Tür" deger={detay.tur||"Diğer"}/>}
         </div>
+        <div className="flex items-center justify-between mt-4 mb-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wider" style={{color:C.inkSoft}}>Bilgiler</h4>
+          {!bilgiDuzenle
+            ? <button onClick={bilgiAc} className="flex items-center gap-1 text-xs font-medium" style={{color:C.inkSoft}}><Pencil size={12}/> Düzenle</button>
+            : <button onClick={bilgiKaydet} className="flex items-center gap-1 text-xs font-semibold" style={{color:C.gelir}}><Check size={13}/> Kaydet</button>}
+        </div>
+        {bilgiDuzenle&&(<div className="grid grid-cols-2 gap-3 mb-2 rounded-lg border p-3" style={{borderColor:C.hair}}>
+          <Inp label="Ünvan / Ad" v={bf.ad} set={v=>setBf({...bf,ad:v})} cls={kumasci?"col-span-2":""}/>
+          {!kumasci&&<div><Lbl>Tür</Lbl>
+            <input list="ted-tur-edit" value={bf.tur} onChange={e=>setBf({...bf,tur:e.target.value})} placeholder="ör. Lastikçi" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+            <datalist id="ted-tur-edit">{turOnerileri.map(t=><option key={t} value={t}/>)}</datalist></div>}
+        </div>)}
         <h4 className="text-xs font-semibold uppercase tracking-wider mt-4 mb-2" style={{color:C.inkSoft}}>Hareketler</h4>
         <Tablo bare><tbody>{[...supplierMov.filter(h=>h.supplier_id===detay.id)].sort((a,b)=>(a.tarih<b.tarih?1:-1)).map(h=>(<Tr key={h.id}>
           <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(h.tarih)}</span></Td><Td>{h.aciklama}</Td>
