@@ -143,7 +143,7 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <KPI etiket="Toplam Satış" deger={tl(toplamSatis)} alt={`${sales.length} işlem`} icon={<ShoppingCart size={18} color={C.ink}/>} bg="#F1EEE6" onClick={()=>git("satis")}/>
-        <KPI etiket="Toplam Kâr" deger={tl(toplamKar)} alt="giriş–satış farkı" renk={C.gelir} icon={<TrendingUp size={18} color={C.gelir}/>} bg={C.gelirBg} onClick={()=>git("satis")}/>
+        <KPI etiket="Toplam Kâr" deger={tl(toplamKar)} alt="giriş–satış farkı" renk={toplamKar>=0?C.gelir:C.gider} icon={<TrendingUp size={18} color={toplamKar>=0?C.gelir:C.gider}/>} bg={toplamKar>=0?C.gelirBg:C.giderBg} onClick={()=>git("satis")}/>
         <KPI etiket="Kasa" deger={tl(kasaBakiye)} dov={dov(kasaBakiye,kur)} alt="peşin nakit" renk={C.gold} icon={<Coins size={18} color={C.gold}/>} bg={C.goldBg}/>
         <KPI etiket="Müşteri Alacağı" deger={tl(musteriAlacak)} dov={dov(musteriAlacak,kur)} alt="tahsil edilecek" renk={C.gelir} icon={<ArrowUpRight size={18} color={C.gelir}/>} bg={C.gelirBg} onClick={()=>git("musteri")}/>
         <KPI etiket="Kumaşçı Borcu" deger={tl(kumasciBorc)} dov={dov(kumasciBorc,kur)} alt="ödenecek" renk={C.gider} icon={<Truck size={18} color={C.gider}/>} bg={C.giderBg} onClick={()=>git("kumasci")}/>
@@ -159,7 +159,7 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
             {sonSatis.map(s=>(<Tr key={s.id}>
               <Td><span className="tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
               <Td><div className="font-medium">{s.urun_ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{sayi(s.adet)} adet · {s.musteri_ad}</div></Td>
-              <Td r mono bold>{tl(s.tutar)}</Td><Td r mono style={{color:C.gelir}}>{tl(s.kar)}</Td>
+              <Td r mono bold>{tl(s.tutar)}</Td><Td r mono style={{color:N(s.kar)>=0?C.gelir:C.gider}}>{tl(s.kar)}</Td>
               <Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
             </Tr>))}
             {sonSatis.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz satış yok.</span></Td></Tr>}
@@ -236,7 +236,7 @@ function Satis({products,customers,sales,kur,A,canDelete}){
         {liste.map(s=>(<Tr key={s.id}>
           <Td><span className="tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
           <Td><div className="font-medium">{s.urun_ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.musteri_ad}</div></Td>
-          <Td r mono>{sayi(s.adet)}</Td><Td r mono bold>{tl(s.tutar)}</Td><Td r mono style={{color:C.gelir}}>{tl(s.kar)}</Td>
+          <Td r mono>{sayi(s.adet)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>birim {tl(N(s.birim_fiyat)||(N(s.adet)?N(s.tutar)/N(s.adet):0))}</div></Td><Td r mono bold>{tl(s.tutar)}</Td><Td r mono style={{color:N(s.kar)>=0?C.gelir:C.gider}}>{tl(s.kar)}</Td>
           <Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
           <Td>{canDelete&&<SilBtn onClick={()=>A.deleteSale(s)}/>}</Td>
         </Tr>))}
@@ -377,11 +377,11 @@ function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete})
           </div>
         )}
         <h4 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{color:C.inkSoft}}>Aldığı Mallar</h4>
-        <Tablo bare><tbody>{sales.filter(s=>s.musteri_id===detay.id).map(s=>(<Tr key={s.id}>
+        <Tablo bare><tbody>{sales.filter(s=>s.musteri_id===detay.id).map(s=>{const bfiyat=N(s.birim_fiyat)||(N(s.adet)?N(s.tutar)/N(s.adet):0); return(<Tr key={s.id}>
           <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
-          <Td>{s.urun_ad} <span style={{color:C.inkSoft}}>×{sayi(s.adet)}</span></Td>
+          <Td><div>{s.urun_ad} <span style={{color:C.inkSoft}}>×{sayi(s.adet)}</span></div><div className="text-xs tabular-nums" style={{color:C.inkSoft}}>birim {tl(bfiyat)}</div></Td>
           <Td r mono bold>{tl(s.tutar)}</Td><Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
-        </Tr>))}{sales.filter(s=>s.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz mal alımı yok.</span></Td></Tr>}</tbody></Tablo>
+        </Tr>);})}{sales.filter(s=>s.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz mal alımı yok.</span></Td></Tr>}</tbody></Tablo>
         <h4 className="text-xs font-semibold uppercase tracking-wider mt-4 mb-2" style={{color:C.inkSoft}}>Tahsilatlar</h4>
         <Tablo bare><tbody>{collections.filter(t=>t.musteri_id===detay.id).map(t=>(<Tr key={t.id}>
           <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(t.tarih)}</span></Td><Td>Tahsilat</Td><Td r mono bold style={{color:C.gelir}}>{tl(t.tutar)}</Td>
