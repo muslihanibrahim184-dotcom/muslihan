@@ -21,8 +21,15 @@ Mağaza satış odaklı yönetim paneli: **Satış, Ürünler (giriş/satış fi
 ### 2) Ortam değişkenleri (`.env.local` / Vercel)
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
+# Sadece sunucu (admin şifre değiştirme) — ASLA NEXT_PUBLIC yapma:
+SUPABASE_SECRET_KEY=sb_secret_xxxx
 ```
+
+> **SUPABASE_SECRET_KEY**: Supabase > Settings > API Keys > Secret key (sb_secret_...) ya da
+> Legacy tab'daki service_role. Yöneticinin başka kullanıcıların şifresini değiştirmesi için
+> gerekir. Tarayıcıya gitmez; sadece sunucu API route'unda kullanılır. Vercel'de de aynı
+> isimle Environment Variables'a ekleyin.
 
 ### 3) İlk kullanıcı + admin yapma
 - Uygulamadan "Kayıt ol" ile ya da Supabase panelinden kullanıcı oluştur.
