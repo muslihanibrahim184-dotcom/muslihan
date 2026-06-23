@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v16"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v19"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -69,17 +69,17 @@ export default function App({ session }) {
   const verilenCek=cheques.filter(c=>c.tip==="verilen"&&c.durum==="Beklemede").reduce((a,b)=>a+N(b.tutar),0);
 
   const A={
-    sale:async({urunId,adet,musteriId,odeme,birimFiyat})=>{ const urun=products.find(p=>p.id===urunId); if(!urun) return "Ürün seçin";
+    sale:async({urunId,adet,musteriId,odeme,birimFiyat,tarih})=>{ const urun=products.find(p=>p.id===urunId); if(!urun) return "Ürün seçin";
       if(adet<=0) return "Adet girin"; if(adet>N(urun.stok)) return `Stok yetersiz (mevcut ${N(urun.stok)})`;
       if(odeme==="veresiye"&&!musteriId) return "Veresiye için müşteri seçin";
-      const musteri=customers.find(m=>m.id===musteriId)||null; await run(()=>db.recordSale({urun,adet,musteri,odeme,birimFiyat})); return null; },
+      const musteri=customers.find(m=>m.id===musteriId)||null; await run(()=>db.recordSale({urun,adet,musteri,odeme,birimFiyat,tarih})); return null; },
     deleteSale:(s)=>run(()=>db.deleteSale(s,products,customers)),
     addProduct:(p)=>run(()=>db.addProduct(p)), updateProduct:(id,patch)=>run(()=>db.updateProduct(id,patch)), deleteProduct:(id)=>run(()=>db.deleteProduct(id)),
     addCustomer:(c)=>run(()=>db.addCustomer(c)), updateCustomer:(id,patch)=>run(()=>db.updateCustomer(id,patch)), deleteCustomer:(id)=>run(()=>db.deleteCustomer(id)),
-    collect:(id,tutar)=>{ const m=customers.find(c=>c.id===id); if(!m||tutar<=0) return; return run(()=>db.collectFromCustomer(m,tutar)); },
+    collect:(id,tutar,tarih)=>{ const m=customers.find(c=>c.id===id); if(!m||tutar<=0) return; return run(()=>db.collectFromCustomer(m,tutar,tarih)); },
     addSupplier:(s)=>run(()=>db.addSupplier(s)), updateSupplier:(id,patch)=>run(()=>db.updateSupplier(id,patch)), deleteSupplier:(id)=>run(()=>db.deleteSupplier(id)),
-    purchase:(id,ac,tutar,odeme)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPurchase(t,ac,tutar,odeme)); },
-    pay:(id,tutar,aciklama)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPay(t,tutar,aciklama)); },
+    purchase:(id,ac,tutar,odeme,tarih)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPurchase(t,ac,tutar,odeme,tarih)); },
+    pay:(id,tutar,aciklama,tarih)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPay(t,tutar,aciklama,tarih)); },
     addCheque:(c)=>run(()=>db.addCheque(c)), deleteCheque:(id)=>run(()=>db.deleteCheque(id)), chequeStatus:(c,d)=>run(()=>db.setChequeStatus(c,d)),
   };
 
@@ -191,7 +191,7 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
 
 // === SATIŞ ==================================================================
 function Satis({products,customers,sales,kur,A,canDelete}){
-  const [f,setF]=useState({urunId:"",adet:"",fiyat:"",pb:"TL",musteriId:"",odeme:"peşin"}); const [hata,setHata]=useState("");
+  const [f,setF]=useState({urunId:"",adet:"",fiyat:"",pb:"TL",musteriId:"",odeme:"peşin",tarih:TODAY}); const [hata,setHata]=useState("");
   const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:"",adres:""});
   const toTr=(n)=>String(Math.round(n*100)/100).replace(".",",");
   const pb=f.pb||"TL"; const sym={TL:"₺",USD:"$",EUR:"€"};
@@ -210,7 +210,7 @@ function Satis({products,customers,sales,kur,A,canDelete}){
     const tlv = pb==="USD" ? v*kur.usd : pb==="EUR" ? v*kur.eur : v;
     const yeni = yeniPb==="USD" ? tlv/kur.usd : yeniPb==="EUR" ? tlv/kur.eur : tlv;
     setF({...f,pb:yeniPb,fiyat:toTr(yeni)}); };
-  const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme,birimFiyat:birim}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",fiyat:"",pb:f.pb,musteriId:"",odeme:f.odeme}); };
+  const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme,birimFiyat:birim,tarih:f.tarih}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",fiyat:"",pb:f.pb,musteriId:"",odeme:f.odeme,tarih:f.tarih}); };
   const yeniMusteri=async()=>{ if(!yeniM.ad.trim())return; const m=await A.addCustomer({ad:yeniM.ad.trim(),telefon:yeniM.telefon.trim(),adres:yeniM.adres.trim(),vergi_no:"",notu:"",bakiye:0}); if(m){ setF(s=>({...s,musteriId:m.id})); setYeniAc(false); setYeniM({ad:"",telefon:"",adres:""}); } };
   const liste=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1));
   return (
@@ -236,6 +236,7 @@ function Satis({products,customers,sales,kur,A,canDelete}){
             <option value="">Peşin müşteri</option>{customers.map(m=><option key={m.id} value={m.id}>{m.ad}</option>)}</select></div>
           <div><Lbl>Ödeme</Lbl><div className="flex gap-1.5">{["peşin","veresiye"].map(o=>{const a=f.odeme===o;return(
             <button key={o} onClick={()=>setF({...f,odeme:o})} className="flex-1 rounded-lg py-2 text-sm font-medium capitalize" style={{background:a?C.ink:"transparent",color:a?"#fff":C.inkSoft,border:`1px solid ${a?C.ink:C.hair}`}}>{o}</button>);})}</div></div>
+          <div className="md:col-span-2"><Lbl>Tarih</Lbl><input type="date" value={f.tarih} onChange={e=>setF({...f,tarih:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
         </div>
         {yeniAc&&(<div className="mt-3 rounded-lg border p-3 flex flex-wrap items-end gap-3" style={{borderColor:C.hair,background:C.paper}}>
           <Inp label="Yeni müşteri adı" v={yeniM.ad} set={v=>setYeniM({...yeniM,ad:v})} cls="flex-1 min-w-[160px]"/>
@@ -344,7 +345,7 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
 function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",telefon:"",adres:"",vergi_no:"",notu:"",acilis:""});
-  const [th,setTh]=useState({musteriId:"",tutar:"",pb:"TL"}); const [detay,setDetay]=useState(null);
+  const [th,setTh]=useState({musteriId:"",tutar:"",pb:"TL",tarih:TODAY}); const [detay,setDetay]=useState(null);
   const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({telefon:"",adres:"",vergi_no:"",notu:""});
   const yeni=async()=>{ if(!ny.ad.trim())return; await A.addCustomer({ad:ny.ad.trim(),telefon:ny.telefon.trim(),adres:ny.adres.trim(),vergi_no:ny.vergi_no.trim(),notu:ny.notu.trim(),bakiye:parse(ny.acilis)}); setNy({ad:"",telefon:"",adres:"",vergi_no:"",notu:"",acilis:""}); setAc(false); };
   const acDetay=(m)=>{ setBilgiDuzenle(false); setDetay(m); };
@@ -381,7 +382,8 @@ function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete})
             </>);
           })()}
         </div>
-        <button onClick={async()=>{const c=th.pb==="USD"?kur.usd:th.pb==="EUR"?kur.eur:1; await A.collect(th.musteriId,parse(th.tutar)*c); setTh({musteriId:"",tutar:"",pb:th.pb});}} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Tahsil Et</button>
+        <div className="min-w-[150px]"><Lbl>Tarih</Lbl><input type="date" value={th.tarih} onChange={e=>setTh({...th,tarih:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+        <button onClick={async()=>{const c=th.pb==="USD"?kur.usd:th.pb==="EUR"?kur.eur:1; await A.collect(th.musteriId,parse(th.tutar)*c,th.tarih); setTh({musteriId:"",tutar:"",pb:th.pb,tarih:th.tarih});}} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Tahsil Et</button>
       </div>
       <Tablo><thead><Tr head><Th>Müşteri</Th><Th>Telefon</Th><Th r>Bakiye</Th><Th r>Durum</Th><Th r>Aldığı Mal</Th><Th></Th></Tr></thead><tbody>
         {[...customers].sort((a,b)=>N(b.bakiye)-N(a.bakiye)).map(m=>{const mallar=sales.filter(s=>s.musteri_id===m.id); return(
@@ -446,7 +448,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
   const grupListe=suppliers.filter(t=>kumasci?t.grup==="kumasci":t.grup!=="kumasci");
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",tur:kumasci?"Kumaşçı":"Lastikçi",acilis:""});
-  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",pb:"TL",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:"",pb:"TL",not:""});
+  const [mg,setMg]=useState({tedId:"",is:"",adet:"",olcu:kumasci?"metre":"adet",birim:"",pb:"TL",tutar:"",odeme:"veresiye",tarih:TODAY}); const [od,setOd]=useState({tedId:"",tutar:"",pb:"TL",not:"",tarih:TODAY});
   const [detay,setDetay]=useState(null); const [filtre,setFiltre]=useState("hepsi");
   const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({ad:"",tur:""});
   const bilgiAc=()=>{ setBf({ad:detay.ad,tur:detay.tur||""}); setBilgiDuzenle(true); };
@@ -478,18 +480,24 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
             const birimTL = pb==="USD" ? birimGiris*kur.usd : pb==="EUR" ? birimGiris*kur.eur : birimGiris;
             const otoTutar=(adetN>0&&birimTL>0)?adetN*birimTL:0;
             const efTutar=otoTutar>0?otoTutar:parse(mg.tutar);
+            const olcu=mg.olcu||"adet";
             const acikla=()=>{ let s=mg.is.trim()||"Mal girişi";
-              if(adetN>0&&birimGiris>0){ s+=` · ${sayi(adetN)} adet × ${sym[pb]}${mg.birim}`; if(pb!=="TL") s+=` (≈₺${d2(birimTL)})`; }
-              else if(adetN>0) s+=` · ${sayi(adetN)} adet`;
+              if(adetN>0&&birimGiris>0){ s+=` · ${sayi(adetN)} ${olcu} × ${sym[pb]}${mg.birim}`; if(pb!=="TL") s+=` (≈₺${d2(birimTL)})`; }
+              else if(adetN>0) s+=` · ${sayi(adetN)} ${olcu}`;
               return s; };
-            const kaydet=async()=>{ if(!mg.tedId||efTutar<=0) return; await A.purchase(mg.tedId,acikla(),efTutar,mg.odeme); setMg({tedId:"",is:"",adet:"",birim:"",pb:mg.pb,tutar:"",odeme:mg.odeme}); };
+            const kaydet=async()=>{ if(!mg.tedId||efTutar<=0) return; await A.purchase(mg.tedId,acikla(),efTutar,mg.odeme,mg.tarih); setMg({tedId:"",is:"",adet:"",olcu:mg.olcu,birim:"",pb:mg.pb,tutar:"",odeme:mg.odeme,tarih:mg.tarih}); };
             return (<>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={mg.tedId} onChange={e=>setMg({...mg,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.map(t=><option key={t.id} value={t.id}>{t.ad}{kumasci?"":` · ${t.tur||"Diğer"}`}</option>)}</select></div>
                 <div className="col-span-2"><Lbl>İş / Ürün (ne için?)</Lbl><input value={mg.is} onChange={e=>setMg({...mg,is:e.target.value})} placeholder="ör. Tişört dikimi, kumaş baskı, fason dikim" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
-                <Inp label="Adet (ops.)" v={mg.adet} set={v=>setMg({...mg,adet:v})} num/>
+                <div><Lbl>Miktar (ops.)</Lbl>
+                  <div className="flex gap-1.5">
+                    <select value={olcu} onChange={e=>setMg({...mg,olcu:e.target.value})} className="rounded-lg px-2 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>{["metre","kilo","adet","top","paket"].map(o=><option key={o} value={o}>{o}</option>)}</select>
+                    <input value={mg.adet} onChange={e=>setMg({...mg,adet:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+                  </div>
+                </div>
                 <div>
-                  <Lbl>Birim Fiyat (ops.)</Lbl>
+                  <Lbl>Birim Fiyat ({olcu} başı, ops.)</Lbl>
                   <div className="flex gap-1.5">
                     <select value={pb} onChange={e=>setMg({...mg,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:pb!=="TL"?C.gold:C.ink}}>
                       <option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option>
@@ -506,6 +514,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
                   {efTutar>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ {dov(efTutar,kur)}</div>}
                 </div>
                 <div><Lbl>Ödeme</Lbl><select value={mg.odeme} onChange={e=>setMg({...mg,odeme:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="veresiye">Veresiye</option><option value="peşin">Peşin</option></select></div>
+                <div className="col-span-2"><Lbl>Tarih</Lbl><input type="date" value={mg.tarih} onChange={e=>setMg({...mg,tarih:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
               </div>
               {(mg.is.trim()||adetN>0)&&<div className="mt-2 text-xs rounded-lg px-3 py-2" style={{background:C.paper,color:C.inkSoft}}>Kayda geçecek: <b style={{color:C.ink}}>{acikla()}</b></div>}
               <button onClick={kaydet} disabled={!mg.tedId||efTutar<=0} className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50" style={{background:C.ink}}>Mal Girişi Kaydet</button>
@@ -519,7 +528,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
             const odCarpan = odPb==="USD"?kur.usd : odPb==="EUR"?kur.eur : 1;
             const odTL = parse(od.tutar)*odCarpan;
             const acikla=()=>{ let s=(od.not||"").trim()||"Ödeme"; if(odPb!=="TL") s+=` · ${sym[odPb]}${od.tutar} (≈₺${d2(odTL)})`; return s; };
-            const ode=async()=>{ if(!od.tedId||odTL<=0) return; await A.pay(od.tedId,odTL,acikla()); setOd({tedId:"",tutar:"",pb:od.pb,not:""}); };
+            const ode=async()=>{ if(!od.tedId||odTL<=0) return; await A.pay(od.tedId,odTL,acikla(),od.tarih); setOd({tedId:"",tutar:"",pb:od.pb,not:"",tarih:od.tarih}); };
             return (<>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={od.tedId} onChange={e=>setOd({...od,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.filter(t=>N(t.bakiye)>0).map(t=><option key={t.id} value={t.id}>{t.ad} — {tl(t.bakiye)} ({dov(N(t.bakiye),kur)})</option>)}</select></div>
@@ -531,6 +540,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
                   </div>
                   {odPb!=="TL"&&odTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(odTL)} ödenecek</div>}
                 </div>
+                <div className="col-span-2"><Lbl>Tarih</Lbl><input type="date" value={od.tarih} onChange={e=>setOd({...od,tarih:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
               </div>
               {(od.tutar&&odTL>0)&&<div className="mt-2 text-xs rounded-lg px-3 py-2" style={{background:C.paper,color:C.inkSoft}}>Kayda geçecek: <b style={{color:C.ink}}>{acikla()}</b></div>}
               <button onClick={ode} disabled={!od.tedId||odTL<=0} className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50" style={{background:C.gelir}}>Ödeme Yap</button>
