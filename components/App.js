@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v7"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v10"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -145,13 +145,13 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        <KPI etiket="Toplam Satış" deger={tl(toplamSatis)} alt={`${sales.length} işlem`} icon={<ShoppingCart size={18} color={C.ink}/>} bg="#F1EEE6" onClick={()=>git("satis")}/>
-        <KPI etiket="Toplam Kâr" deger={tl(toplamKar)} alt="giriş–satış farkı" renk={toplamKar>=0?C.gelir:C.gider} icon={<TrendingUp size={18} color={toplamKar>=0?C.gelir:C.gider}/>} bg={toplamKar>=0?C.gelirBg:C.giderBg} onClick={()=>git("satis")}/>
+        <KPI etiket="Toplam Satış" deger={tl(toplamSatis)} dov={dov(toplamSatis,kur)} alt={`${sales.length} işlem`} icon={<ShoppingCart size={18} color={C.ink}/>} bg="#F1EEE6" onClick={()=>git("satis")}/>
+        <KPI etiket="Toplam Kâr" deger={tl(toplamKar)} dov={dov(toplamKar,kur)} alt="giriş–satış farkı" renk={toplamKar>=0?C.gelir:C.gider} icon={<TrendingUp size={18} color={toplamKar>=0?C.gelir:C.gider}/>} bg={toplamKar>=0?C.gelirBg:C.giderBg} onClick={()=>git("satis")}/>
         <KPI etiket="Kasa" deger={tl(kasaBakiye)} dov={dov(kasaBakiye,kur)} alt="peşin nakit" renk={C.gold} icon={<Coins size={18} color={C.gold}/>} bg={C.goldBg}/>
         <KPI etiket="Müşteri Alacağı" deger={tl(musteriAlacak)} dov={dov(musteriAlacak,kur)} alt="tahsil edilecek" renk={C.gelir} icon={<ArrowUpRight size={18} color={C.gelir}/>} bg={C.gelirBg} onClick={()=>git("musteri")}/>
         <KPI etiket="Kumaşçı Borcu" deger={tl(kumasciBorc)} dov={dov(kumasciBorc,kur)} alt="ödenecek" renk={C.gider} icon={<Truck size={18} color={C.gider}/>} bg={C.giderBg} onClick={()=>git("kumasci")}/>
         <KPI etiket="Tedarikçi Borcu" deger={tl(tedarikciBorc)} dov={dov(tedarikciBorc,kur)} alt="ödenecek" renk={C.gider} icon={<ArrowDownRight size={18} color={C.gider}/>} bg={C.giderBg} onClick={()=>git("ted")}/>
-        <KPI etiket="Stok Değeri" deger={tl(stokDeger)} alt={`${products.length} ürün · ${kritik} kritik`} icon={<Boxes size={18} color={C.gold}/>} bg={C.goldBg} onClick={()=>git("urun")}/>
+        <KPI etiket="Stok Değeri" deger={tl(stokDeger)} dov={dov(stokDeger,kur)} alt={`${products.length} ürün · ${kritik} kritik`} icon={<Boxes size={18} color={C.gold}/>} bg={C.goldBg} onClick={()=>git("urun")}/>
         <KPI etiket="Alınan Çek" deger={tl(alinanCek)} dov={dov(alinanCek,kur)} alt="portföyde" renk={C.gelir} icon={<ScrollText size={18} color={C.gelir}/>} bg={C.gelirBg} onClick={()=>git("cek")}/>
         <KPI etiket="Verilen Çek" deger={tl(verilenCek)} dov={dov(verilenCek,kur)} alt="vadesi gelecek" renk={C.gider} icon={<ScrollText size={18} color={C.gider}/>} bg={C.giderBg} onClick={()=>git("cek")}/>
       </div>
@@ -162,7 +162,7 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
             {sonSatis.map(s=>(<Tr key={s.id}>
               <Td><span className="tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
               <Td><div className="font-medium">{s.urun_ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{sayi(s.adet)} adet · {s.musteri_ad}</div></Td>
-              <Td r mono bold>{tl(s.tutar)}</Td><Td r mono style={{color:N(s.kar)>=0?C.gelir:C.gider}}>{tl(s.kar)}</Td>
+              <Td r mono bold>{tl(s.tutar)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(s.tutar,kur)}</div></Td><Td r mono style={{color:N(s.kar)>=0?C.gelir:C.gider}}>{tl(s.kar)}</Td>
               <Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
             </Tr>))}
             {sonSatis.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz satış yok.</span></Td></Tr>}
@@ -191,15 +191,26 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
 
 // === SATIŞ ==================================================================
 function Satis({products,customers,sales,kur,A,canDelete}){
-  const [f,setF]=useState({urunId:"",adet:"",fiyat:"",musteriId:"",odeme:"peşin"}); const [hata,setHata]=useState("");
+  const [f,setF]=useState({urunId:"",adet:"",fiyat:"",pb:"TL",musteriId:"",odeme:"peşin"}); const [hata,setHata]=useState("");
   const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:"",adres:""});
-  const toTr=(n)=>String(n).replace(".",",");
+  const toTr=(n)=>String(Math.round(n*100)/100).replace(".",",");
+  const pb=f.pb||"TL"; const sym={TL:"₺",USD:"$",EUR:"€"};
   const u=products.find(x=>x.id===f.urunId); const adet=parseInt(f.adet)||0;
-  const birim=parse(f.fiyat)||N(u?.satis);
-  const fiyatDegisti=u&&birim>0&&birim!==N(u.satis);
+  const birimGiris=parse(f.fiyat);
+  const birimTL = pb==="USD" ? birimGiris*kur.usd : pb==="EUR" ? birimGiris*kur.eur : birimGiris;
+  const birim = birimTL>0 ? birimTL : N(u?.satis);
+  const fiyatDegisti=u&&birim>0&&Math.round(birim)!==Math.round(N(u.satis));
   const onizleme=u?{tutar:adet*birim,kar:adet*(birim-N(u.giris))}:null;
-  const urunSec=(id)=>{ const p=products.find(x=>x.id===id); setF({...f,urunId:id,fiyat:p?toTr(p.satis):""}); };
-  const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme,birimFiyat:birim}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",fiyat:"",musteriId:"",odeme:f.odeme}); };
+  // ürünü seçince liste fiyatını, seçili para birimine çevirerek doldur
+  const urunSec=(id)=>{ const p=products.find(x=>x.id===id); if(!p){setF({...f,urunId:id,fiyat:""});return;}
+    const v = pb==="USD" ? N(p.satis)/kur.usd : pb==="EUR" ? N(p.satis)/kur.eur : N(p.satis);
+    setF({...f,urunId:id,fiyat:toTr(v)}); };
+  // para birimi değişince mevcut fiyatı yeni birime çevir (değer aynı kalsın)
+  const pbDegis=(yeniPb)=>{ const v=parse(f.fiyat); if(v<=0){setF({...f,pb:yeniPb});return;}
+    const tlv = pb==="USD" ? v*kur.usd : pb==="EUR" ? v*kur.eur : v;
+    const yeni = yeniPb==="USD" ? tlv/kur.usd : yeniPb==="EUR" ? tlv/kur.eur : tlv;
+    setF({...f,pb:yeniPb,fiyat:toTr(yeni)}); };
+  const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme,birimFiyat:birim}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",fiyat:"",pb:f.pb,musteriId:"",odeme:f.odeme}); };
   const yeniMusteri=async()=>{ if(!yeniM.ad.trim())return; const m=await A.addCustomer({ad:yeniM.ad.trim(),telefon:yeniM.telefon.trim(),adres:yeniM.adres.trim(),vergi_no:"",notu:"",bakiye:0}); if(m){ setF(s=>({...s,musteriId:m.id})); setYeniAc(false); setYeniM({ad:"",telefon:"",adres:""}); } };
   const liste=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1));
   return (
@@ -211,7 +222,15 @@ function Satis({products,customers,sales,kur,A,canDelete}){
             <select value={f.urunId} onChange={e=>urunSec(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>
               <option value="">Ürün seçin...</option>{products.map(x=><option key={x.id} value={x.id} disabled={N(x.stok)<=0}>{x.ad} — {tl(x.satis)} (stok {sayi(x.stok)})</option>)}</select></div>
           <div><Lbl>Adet</Lbl><input value={f.adet} onChange={e=>setF({...f,adet:e.target.value})} inputMode="numeric" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
-          <div><Lbl>Birim Fiyat ₺</Lbl><input value={f.fiyat} onChange={e=>setF({...f,fiyat:e.target.value})} inputMode="decimal" placeholder={u?toTr(u.satis):"0"} className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${fiyatDegisti?C.gold:C.hair}`,background:C.paper}}/></div>
+          <div><Lbl>Birim Fiyat</Lbl>
+            <div className="flex gap-1.5">
+              <select value={pb} onChange={e=>pbDegis(e.target.value)} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:pb!=="TL"?C.gold:C.ink}}>
+                <option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option>
+              </select>
+              <input value={f.fiyat} onChange={e=>setF({...f,fiyat:e.target.value})} inputMode="decimal" placeholder="0" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${fiyatDegisti?C.gold:C.hair}`,background:C.paper}}/>
+            </div>
+            {pb!=="TL"&&birimTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(birimTL)}/adet</div>}
+          </div>
           <div><div className="flex items-center justify-between"><Lbl>Müşteri</Lbl><button onClick={()=>setYeniAc(!yeniAc)} className="text-xs font-medium mb-1.5" style={{color:C.gelir}}>+ Yeni</button></div>
             <select value={f.musteriId} onChange={e=>setF({...f,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>
             <option value="">Peşin müşteri</option>{customers.map(m=><option key={m.id} value={m.id}>{m.ad}</option>)}</select></div>
@@ -227,7 +246,7 @@ function Satis({products,customers,sales,kur,A,canDelete}){
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
           <div className="flex items-center gap-4">
             {onizleme&&adet>0&&<>
-              <span className="text-sm" style={{color:C.inkSoft}}>Birim: <b style={{color:fiyatDegisti?C.gold:C.ink}}>{tl(birim)}</b>{fiyatDegisti&&<span className="text-xs" style={{color:C.inkSoft}}> (liste {tl(u.satis)})</span>}</span>
+              <span className="text-sm" style={{color:C.inkSoft}}>Birim: <b style={{color:fiyatDegisti?C.gold:C.ink}}>{pb==="TL"?tl(birim):`${sym[pb]}${f.fiyat} (${tl(birim)})`}</b>{fiyatDegisti&&<span className="text-xs" style={{color:C.inkSoft}}> · liste {tl(u.satis)}</span>}</span>
               <span className="text-sm" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(onizleme.tutar)}</b> <span className="text-xs tabular-nums">({dov(onizleme.tutar,kur)})</span></span>
               <span className="text-sm" style={{color:C.inkSoft}}>Kâr: <b style={{color:onizleme.kar>=0?C.gelir:C.gider}}>{tl(onizleme.kar)}</b></span></>}
             {hata&&<span className="text-sm font-medium" style={{color:C.gider}}>{hata}</span>}
@@ -252,22 +271,34 @@ function Satis({products,customers,sales,kur,A,canDelete}){
 // === ÜRÜNLER ================================================================
 function Urunler({products,stokDeger,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
-  const bos={ad:"",kod:"",kategori:"",stok:"",birim:"adet",giris:"",satis:"",min:""};
+  const bos={ad:"",kod:"",kategori:"",stok:"",birim:"adet",giris:"",satis:"",min:"",pb:"TL"};
   const [f,setF]=useState(bos); const [arama,setArama]=useState("");
   const [duz,setDuz]=useState(null); // düzenlenen ürün
   const [df,setDf]=useState(bos);
-  const ekle=async()=>{ if(!f.ad.trim())return; await A.addProduct({ad:f.ad.trim(),kod:f.kod||"—",kategori:f.kategori||"Genel",stok:parse(f.stok),birim:f.birim,giris:parse(f.giris),satis:parse(f.satis),min_stok:parse(f.min)}); setF(bos); setAc(false); };
-  const duzenleAc=(s)=>{ setDf({ad:s.ad,kod:s.kod==="—"?"":s.kod,kategori:s.kategori==="Genel"?"":s.kategori,stok:String(s.stok),birim:s.birim||"adet",giris:String(s.giris),satis:String(s.satis),min:String(s.min_stok)}); setDuz(s); };
-  const duzenleKaydet=async()=>{ if(!df.ad.trim())return; await A.updateProduct(duz.id,{ad:df.ad.trim(),kod:df.kod||"—",kategori:df.kategori||"Genel",stok:parse(df.stok),birim:df.birim,giris:parse(df.giris),satis:parse(df.satis),min_stok:parse(df.min)}); setDuz(null); };
+  const sym={TL:"₺",USD:"$",EUR:"€"};
+  const carpan=(p)=>p==="USD"?kur.usd:p==="EUR"?kur.eur:1;
+  const toTr=(n)=>String(Math.round(n*100)/100).replace(".",",");
+  // para birimi değişince giriş+satış değerlerini yeni birime çevir
+  const pbDegis=(ff,setFf,yeniPb)=>{ const eski=ff.pb||"TL"; const g=parse(ff.giris), s=parse(ff.satis);
+    const conv=(v)=> v>0 ? toTr((v*carpan(eski))/carpan(yeniPb)) : "";
+    setFf({...ff,pb:yeniPb,giris:g>0?conv(g):ff.giris,satis:s>0?conv(s):ff.satis}); };
+  const ekle=async()=>{ if(!f.ad.trim())return; const c=carpan(f.pb||"TL");
+    await A.addProduct({ad:f.ad.trim(),kod:f.kod||"—",kategori:f.kategori||"Genel",stok:parse(f.stok),birim:f.birim,giris:parse(f.giris)*c,satis:parse(f.satis)*c,min_stok:parse(f.min)}); setF(bos); setAc(false); };
+  const duzenleAc=(s)=>{ setDf({ad:s.ad,kod:s.kod==="—"?"":s.kod,kategori:s.kategori==="Genel"?"":s.kategori,stok:String(s.stok),birim:s.birim||"adet",giris:String(s.giris),satis:String(s.satis),min:String(s.min_stok),pb:"TL"}); setDuz(s); };
+  const duzenleKaydet=async()=>{ if(!df.ad.trim())return; const c=carpan(df.pb||"TL");
+    await A.updateProduct(duz.id,{ad:df.ad.trim(),kod:df.kod||"—",kategori:df.kategori||"Genel",stok:parse(df.stok),birim:df.birim,giris:parse(df.giris)*c,satis:parse(df.satis)*c,min_stok:parse(df.min)}); setDuz(null); };
   const goster=products.filter(u=>(u.ad+u.kod+u.kategori).toLowerCase().includes(arama.toLowerCase()));
-  const FormGrid=(ff,setFf)=>(
+  const FormGrid=(ff,setFf)=>{ const p=ff.pb||"TL"; return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <Inp label="Ürün adı" v={ff.ad} set={v=>setFf({...ff,ad:v})} cls="col-span-2"/><Inp label="Kod" v={ff.kod} set={v=>setFf({...ff,kod:v})}/><Inp label="Kategori" v={ff.kategori} set={v=>setFf({...ff,kategori:v})}/>
       <Inp label="Stok" v={ff.stok} set={v=>setFf({...ff,stok:v})} num/>
       <div><Lbl>Birim</Lbl><select value={ff.birim} onChange={e=>setFf({...ff,birim:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>{["adet","top","mt","kg","paket"].map(b=><option key={b}>{b}</option>)}</select></div>
-      <Inp label="Giriş ₺ (maliyet)" v={ff.giris} set={v=>setFf({...ff,giris:v})} num/><Inp label="Satış ₺" v={ff.satis} set={v=>setFf({...ff,satis:v})} num/><Inp label="Min. stok" v={ff.min} set={v=>setFf({...ff,min:v})} num/>
+      <div><Lbl>Fiyat Birimi</Lbl><select value={p} onChange={e=>pbDegis(ff,setFf,e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${p!=="TL"?C.gold:C.hair}`,background:C.paper,color:p!=="TL"?C.gold:C.ink}}><option value="TL">₺ TL</option><option value="USD">$ Dolar</option><option value="EUR">€ Euro</option></select></div>
+      <div><Lbl>Giriş {sym[p]} (maliyet)</Lbl><input value={ff.giris} onChange={e=>setFf({...ff,giris:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.giris)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.giris)*carpan(p))}</div>}</div>
+      <div><Lbl>Satış {sym[p]}</Lbl><input value={ff.satis} onChange={e=>setFf({...ff,satis:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.satis)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.satis)*carpan(p))}</div>}</div>
+      <Inp label="Min. stok" v={ff.min} set={v=>setFf({...ff,min:v})} num/>
     </div>
-  );
+  );};
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -383,11 +414,11 @@ function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete})
         <Tablo bare><tbody>{sales.filter(s=>s.musteri_id===detay.id).map(s=>{const bfiyat=N(s.birim_fiyat)||(N(s.adet)?N(s.tutar)/N(s.adet):0); return(<Tr key={s.id}>
           <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
           <Td><div>{s.urun_ad} <span style={{color:C.inkSoft}}>×{sayi(s.adet)}</span></div><div className="text-xs tabular-nums" style={{color:C.inkSoft}}>birim {tl(bfiyat)}</div></Td>
-          <Td r mono bold>{tl(s.tutar)}</Td><Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
+          <Td r mono bold>{tl(s.tutar)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(s.tutar,kur)}</div></Td><Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
         </Tr>);})}{sales.filter(s=>s.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz mal alımı yok.</span></Td></Tr>}</tbody></Tablo>
         <h4 className="text-xs font-semibold uppercase tracking-wider mt-4 mb-2" style={{color:C.inkSoft}}>Tahsilatlar</h4>
         <Tablo bare><tbody>{collections.filter(t=>t.musteri_id===detay.id).map(t=>(<Tr key={t.id}>
-          <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(t.tarih)}</span></Td><Td>Tahsilat</Td><Td r mono bold style={{color:C.gelir}}>{tl(t.tutar)}</Td>
+          <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(t.tarih)}</span></Td><Td>Tahsilat</Td><Td r mono bold style={{color:C.gelir}}>{tl(t.tutar)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(t.tutar,kur)}</div></Td>
         </Tr>))}{collections.filter(t=>t.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Tahsilat yok.</span></Td></Tr>}</tbody></Tablo>
       </Modal>}
     </div>
