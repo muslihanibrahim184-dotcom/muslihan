@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v10"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v12"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -317,9 +317,9 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
             <Td><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}</div></Td>
             <Td><Rozet renk={C.gold} bg={C.goldBg}>{s.kategori}</Rozet></Td>
             <Td r><span className="tabular-nums font-semibold" style={{color:dusuk?C.gider:C.ink}}>{sayi(s.stok)} {s.birim}</span>{dusuk&&<div className="text-xs" style={{color:C.gider}}>kritik</div>}</Td>
-            <Td r mono>{tl(s.giris)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.giris),kur)}</div></Td>
-            <Td r mono>{tl(s.satis)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.satis),kur)}</div></Td>
-            <Td r mono><div className="font-medium" style={{color:C.gelir}}>{tl(kar)}</div><div className="text-xs" style={{color:C.inkSoft}}>{dov(kar,kur)}</div></Td>
+            <Td r mono>{tl(s.giris)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.giris),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(N(s.stok)*N(s.giris))}</div></Td>
+            <Td r mono>{tl(s.satis)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.satis),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(N(s.stok)*N(s.satis))}</div></Td>
+            <Td r mono><div className="font-medium" style={{color:C.gelir}}>{tl(kar)}</div><div className="text-xs" style={{color:C.inkSoft}}>{dov(kar,kur)}</div><div className="text-xs font-semibold" style={{color:kar>=0?C.gelir:C.gider}}>toplam {tl(N(s.stok)*kar)}</div></Td>
             <Td r mono style={{color:C.gelir}}>%{marj}</Td>
             <Td r><div className="flex items-center justify-end gap-1">
               <button onClick={()=>duzenleAc(s)} className="p-1.5 rounded" title="Düzenle"><Pencil size={15} color={C.inkSoft}/></button>
@@ -435,7 +435,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
   const grupListe=suppliers.filter(t=>kumasci?t.grup==="kumasci":t.grup!=="kumasci");
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",tur:kumasci?"Kumaşçı":"Lastikçi",acilis:""});
-  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",pb:"TL",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:""});
+  const [mg,setMg]=useState({tedId:"",is:"",adet:"",birim:"",pb:"TL",tutar:"",odeme:"veresiye"}); const [od,setOd]=useState({tedId:"",tutar:"",pb:"TL"});
   const [detay,setDetay]=useState(null); const [filtre,setFiltre]=useState("hepsi");
   const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({ad:"",tur:""});
   const bilgiAc=()=>{ setBf({ad:detay.ad,tur:detay.tur||""}); setBilgiDuzenle(true); };
@@ -503,11 +503,25 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
         </div>
         <div className="rounded-xl border p-4" style={{background:C.surface,borderColor:C.hair}}>
           <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{color:C.inkSoft}}>Borç Ödeme</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={od.tedId} onChange={e=>setOd({...od,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.filter(t=>N(t.bakiye)>0).map(t=><option key={t.id} value={t.id}>{t.ad} ({tl(t.bakiye)})</option>)}</select></div>
-            <Inp label="Tutar ₺" v={od.tutar} set={v=>setOd({...od,tutar:v})} num cls="col-span-2"/>
-          </div>
-          <button onClick={async()=>{await A.pay(od.tedId,parse(od.tutar)); setOd({tedId:"",tutar:""});}} className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Ödeme Yap</button>
+          {(()=>{
+            const odPb=od.pb||"TL"; const sym={TL:"₺",USD:"$",EUR:"€"};
+            const odCarpan = odPb==="USD"?kur.usd : odPb==="EUR"?kur.eur : 1;
+            const odTL = parse(od.tutar)*odCarpan;
+            const ode=async()=>{ if(!od.tedId||odTL<=0) return; await A.pay(od.tedId,odTL); setOd({tedId:"",tutar:"",pb:od.pb}); };
+            return (<>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2"><Lbl>{etiket}</Lbl><select value={od.tedId} onChange={e=>setOd({...od,tedId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin...</option>{grupListe.filter(t=>N(t.bakiye)>0).map(t=><option key={t.id} value={t.id}>{t.ad} ({tl(t.bakiye)})</option>)}</select></div>
+                <div className="col-span-2"><Lbl>Tutar</Lbl>
+                  <div className="flex gap-1.5">
+                    <select value={odPb} onChange={e=>setOd({...od,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${odPb!=="TL"?C.gold:C.hair}`,background:C.paper,color:odPb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+                    <input value={od.tutar} onChange={e=>setOd({...od,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+                  </div>
+                  {odPb!=="TL"&&odTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(odTL)} ödenecek</div>}
+                </div>
+              </div>
+              <button onClick={ode} disabled={!od.tedId||odTL<=0} className="mt-3 w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50" style={{background:C.gelir}}>Ödeme Yap</button>
+            </>);
+          })()}
         </div>
       </div>
       {!kumasci&&<div className="flex gap-1.5 flex-wrap">
