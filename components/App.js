@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Trash2, Search, Boxes, ShoppingCart, Users, Truck, Scissors, LayoutDashboard,
   AlertTriangle, TrendingUp, X, Receipt, Coins, ArrowUpRight, ArrowDownRight, ScrollText,
-  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound,
+  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound, ArrowRightLeft,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as db from "@/lib/db";
@@ -122,7 +122,7 @@ export default function App({ session }) {
         </div>
 
         {aktif==="ozet" && <Ozet {...{stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,kumasciBorc,tedarikciBorc,alinanCek,verilenCek,cheques,sales,products,kur}} git={setSekme}/>}
-        {aktif==="satis" && <Satis {...{products,customers,sales,A,canDelete}}/>}
+        {aktif==="satis" && <Satis {...{products,customers,sales,kur,A,canDelete}}/>}
         {aktif==="urun" && <Urunler {...{products,stokDeger,kur,A,canDelete}}/>}
         {aktif==="musteri" && <Musteriler {...{customers,sales,collections,musteriAlacak,kur,A,canDelete}}/>}
         {aktif==="kumasci" && <SupplierScreen grup="kumasci" toplam={kumasciBorc} kur={kur} {...{suppliers,supplierMov,A,canDelete}}/>}
@@ -187,7 +187,7 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
 }
 
 // === SATIŞ ==================================================================
-function Satis({products,customers,sales,A,canDelete}){
+function Satis({products,customers,sales,kur,A,canDelete}){
   const [f,setF]=useState({urunId:"",adet:"",musteriId:"",odeme:"peşin"}); const [hata,setHata]=useState("");
   const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:""});
   const u=products.find(x=>x.id===f.urunId); const adet=parseInt(f.adet)||0;
@@ -217,7 +217,7 @@ function Satis({products,customers,sales,A,canDelete}){
         </div>)}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
           <div className="flex items-center gap-4">
-            {onizleme&&adet>0&&<><span className="text-sm" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(onizleme.tutar)}</b></span><span className="text-sm" style={{color:C.inkSoft}}>Kâr: <b style={{color:C.gelir}}>{tl(onizleme.kar)}</b></span></>}
+            {onizleme&&adet>0&&<><span className="text-sm" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(onizleme.tutar)}</b> <span className="text-xs tabular-nums">({dov(onizleme.tutar,kur)})</span></span><span className="text-sm" style={{color:C.inkSoft}}>Kâr: <b style={{color:C.gelir}}>{tl(onizleme.kar)}</b></span></>}
             {hata&&<span className="text-sm font-medium" style={{color:C.gider}}>{hata}</span>}
           </div>
           <button onClick={yap} className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white" style={{background:C.gelir}}><Plus size={16}/> Satışı Kaydet</button>
@@ -319,7 +319,8 @@ function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete})
         <Inp label="Vergi / TC No (ops.)" v={ny.vergi_no} set={v=>setNy({...ny,vergi_no:v})}/>
         <Inp label="Adres" v={ny.adres} set={v=>setNy({...ny,adres:v})} cls="col-span-2"/>
         <Inp label="Not" v={ny.notu} set={v=>setNy({...ny,notu:v})}/>
-        <Inp label="Açılış borcu ₺" v={ny.acilis} set={v=>setNy({...ny,acilis:v})} num/>
+        <div><Inp label="Açılış borcu ₺" v={ny.acilis} set={v=>setNy({...ny,acilis:v})} num/>
+          {parse(ny.acilis)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ {dov(parse(ny.acilis),kur)}</div>}</div>
         <div className="col-span-2 md:col-span-3 flex justify-end"><button onClick={yeni} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Kaydet</button></div>
       </div>)}
       <div className="rounded-xl border p-4 flex flex-wrap items-end gap-3" style={{background:C.surface,borderColor:C.hair}}>
@@ -577,6 +578,8 @@ function Kullanicilar({me}){
 // === DÖVİZ KURU =============================================================
 function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
   const [duzenle,setDuzenle]=useState(false); const [tmp,setTmp]=useState({usd:"",eur:""});
+  const [cev,setCev]=useState(""); // çevirici girişi (TL)
+  const cevTL=parse(cev);
   const fmt=(n)=>Number(n).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const kaydet=()=>{ onElle(parse(tmp.usd)||kur.usd,parse(tmp.eur)||kur.eur); setDuzenle(false); };
   const acD=()=>{ setTmp({usd:kur.usd.toFixed(2).replace(".",","),eur:kur.eur.toFixed(2).replace(".",",")}); setDuzenle(true); };
@@ -596,6 +599,19 @@ function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
       <button onClick={onCek} className="flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium" style={{borderColor:C.hair,background:C.surface,color:C.inkSoft}}><RefreshCw size={13} className={durum==="yukleniyor"?"animate-spin":""}/> Yenile</button>
       <button onClick={acD} className="flex items-center justify-center rounded-full border h-7 w-7" style={{borderColor:C.hair,background:C.surface,color:C.inkSoft}}><Pencil size={12}/></button>
       <span className="text-xs" style={{color:C.inkSoft}}>{eK}</span>
+
+      {/* Anlık çevirici: TL yaz → $/€ gör */}
+      <div className="flex items-center gap-2 rounded-full border pl-3 pr-1.5 py-1" style={{borderColor:C.hair,background:C.surface}}>
+        <ArrowRightLeft size={13} color={C.inkSoft}/>
+        <div className="relative">
+          <input value={cev} onChange={e=>setCev(e.target.value)} inputMode="decimal" placeholder="0"
+            className="w-24 rounded-full pl-2.5 pr-5 py-1 text-sm font-semibold outline-none tabular-nums text-right"
+            style={{border:`1px solid ${C.hair}`,background:C.paper,color:C.ink}}/>
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft}}>₺</span>
+        </div>
+        <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{color:C.gelir}}>${fmt(cevTL/kur.usd)}</span>
+        <span className="text-sm font-semibold tabular-nums whitespace-nowrap pr-1" style={{color:C.gold}}>€{fmt(cevTL/kur.eur)}</span>
+      </div>
     </div>
   );
 }
