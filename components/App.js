@@ -18,8 +18,12 @@ const dov=(a,kur)=>(!kur||!a)?"":`$${d2(a/kur.usd)} · €${d2(a/kur.eur)}`;
 const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
+// Yazarken binlik ayraç (1.000 · 100.000), ondalık virgül korunur
+const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); const i=s.indexOf(",");
+  let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
+  tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v22"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v23"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -220,7 +224,7 @@ function Satis({products,customers,sales,kur,A,canDelete}){
   const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:"",adres:""});
   const toTr=(n)=>String(Math.round(n*100)/100).replace(".",",");
   const pb=f.pb||"TL"; const sym={TL:"₺",USD:"$",EUR:"€"};
-  const u=products.find(x=>x.id===f.urunId); const adet=parseInt(f.adet)||0;
+  const u=products.find(x=>x.id===f.urunId); const adet=parse(f.adet);
   const birimGiris=parse(f.fiyat);
   const birimTL = pb==="USD" ? birimGiris*kur.usd : pb==="EUR" ? birimGiris*kur.eur : birimGiris;
   const birim = birimTL>0 ? birimTL : N(u?.satis);
@@ -229,12 +233,12 @@ function Satis({products,customers,sales,kur,A,canDelete}){
   // ürünü seçince liste fiyatını, seçili para birimine çevirerek doldur
   const urunSec=(id)=>{ const p=products.find(x=>x.id===id); if(!p){setF({...f,urunId:id,fiyat:""});return;}
     const v = pb==="USD" ? N(p.satis)/kur.usd : pb==="EUR" ? N(p.satis)/kur.eur : N(p.satis);
-    setF({...f,urunId:id,fiyat:toTr(v)}); };
+    setF({...f,urunId:id,fiyat:fmtInput(toTr(v))}); };
   // para birimi değişince mevcut fiyatı yeni birime çevir (değer aynı kalsın)
   const pbDegis=(yeniPb)=>{ const v=parse(f.fiyat); if(v<=0){setF({...f,pb:yeniPb});return;}
     const tlv = pb==="USD" ? v*kur.usd : pb==="EUR" ? v*kur.eur : v;
     const yeni = yeniPb==="USD" ? tlv/kur.usd : yeniPb==="EUR" ? tlv/kur.eur : tlv;
-    setF({...f,pb:yeniPb,fiyat:toTr(yeni)}); };
+    setF({...f,pb:yeniPb,fiyat:fmtInput(toTr(yeni))}); };
   const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme,birimFiyat:birim,tarih:f.tarih}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",fiyat:"",pb:f.pb,musteriId:"",odeme:f.odeme,tarih:f.tarih}); };
   const yeniMusteri=async()=>{ if(!yeniM.ad.trim())return; const m=await A.addCustomer({ad:yeniM.ad.trim(),telefon:yeniM.telefon.trim(),adres:yeniM.adres.trim(),vergi_no:"",notu:"",bakiye:0}); if(m){ setF(s=>({...s,musteriId:m.id})); setYeniAc(false); setYeniM({ad:"",telefon:"",adres:""}); } };
   const liste=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1));
@@ -246,13 +250,13 @@ function Satis({products,customers,sales,kur,A,canDelete}){
           <div className="md:col-span-2"><Lbl>Ürün</Lbl>
             <select value={f.urunId} onChange={e=>urunSec(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>
               <option value="">Ürün seçin...</option>{products.map(x=><option key={x.id} value={x.id} disabled={N(x.stok)<=0}>{x.ad} — {tl(x.satis)} (stok {sayi(x.stok)})</option>)}</select></div>
-          <div><Lbl>Adet</Lbl><input value={f.adet} onChange={e=>setF({...f,adet:e.target.value})} inputMode="numeric" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div><Lbl>Adet</Lbl><input value={f.adet} onChange={e=>setF({...f,adet:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
           <div><Lbl>Birim Fiyat</Lbl>
             <div className="flex gap-1.5">
               <select value={pb} onChange={e=>pbDegis(e.target.value)} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:pb!=="TL"?C.gold:C.ink}}>
                 <option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option>
               </select>
-              <input value={f.fiyat} onChange={e=>setF({...f,fiyat:e.target.value})} inputMode="decimal" placeholder="0" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${fiyatDegisti?C.gold:C.hair}`,background:C.paper}}/>
+              <input value={f.fiyat} onChange={e=>setF({...f,fiyat:fmtInput(e.target.value)})} inputMode="decimal" placeholder="0" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${fiyatDegisti?C.gold:C.hair}`,background:C.paper}}/>
             </div>
             {pb!=="TL"&&birimTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(birimTL)}/adet</div>}
           </div>
@@ -306,7 +310,7 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
   const toTr=(n)=>String(Math.round(n*100)/100).replace(".",",");
   // para birimi değişince giriş+satış değerlerini yeni birime çevir
   const pbDegis=(ff,setFf,yeniPb)=>{ const eski=ff.pb||"TL"; const g=parse(ff.giris), s=parse(ff.satis);
-    const conv=(v)=> v>0 ? toTr((v*carpan(eski))/carpan(yeniPb)) : "";
+    const conv=(v)=> v>0 ? fmtInput(toTr((v*carpan(eski))/carpan(yeniPb))) : "";
     setFf({...ff,pb:yeniPb,giris:g>0?conv(g):ff.giris,satis:s>0?conv(s):ff.satis}); };
   const ekle=async()=>{ if(!f.ad.trim())return; const c=carpan(f.pb||"TL");
     await A.addProduct({ad:f.ad.trim(),kod:f.kod||"—",kategori:f.kategori||"Genel",stok:parse(f.stok),birim:f.birim,giris:parse(f.giris)*c,satis:parse(f.satis)*c,min_stok:parse(f.min)}); setF(bos); setAc(false); };
@@ -320,8 +324,8 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
       <Inp label="Stok" v={ff.stok} set={v=>setFf({...ff,stok:v})} num/>
       <div><Lbl>Birim</Lbl><select value={ff.birim} onChange={e=>setFf({...ff,birim:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>{["adet","top","mt","kg","paket"].map(b=><option key={b}>{b}</option>)}</select></div>
       <div><Lbl>Fiyat Birimi</Lbl><select value={p} onChange={e=>pbDegis(ff,setFf,e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${p!=="TL"?C.gold:C.hair}`,background:C.paper,color:p!=="TL"?C.gold:C.ink}}><option value="TL">₺ TL</option><option value="USD">$ Dolar</option><option value="EUR">€ Euro</option></select></div>
-      <div><Lbl>Giriş {sym[p]} (maliyet)</Lbl><input value={ff.giris} onChange={e=>setFf({...ff,giris:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.giris)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.giris)*carpan(p))}</div>}</div>
-      <div><Lbl>Satış {sym[p]}</Lbl><input value={ff.satis} onChange={e=>setFf({...ff,satis:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.satis)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.satis)*carpan(p))}</div>}</div>
+      <div><Lbl>Giriş {sym[p]} (maliyet)</Lbl><input value={ff.giris} onChange={e=>setFf({...ff,giris:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.giris)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.giris)*carpan(p))}</div>}</div>
+      <div><Lbl>Satış {sym[p]}</Lbl><input value={ff.satis} onChange={e=>setFf({...ff,satis:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.satis)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.satis)*carpan(p))}</div>}</div>
       <Inp label="Min. stok" v={ff.min} set={v=>setFf({...ff,min:v})} num/>
     </div>
   );};
@@ -403,7 +407,7 @@ function Musteriler({customers,sales,collections,musteriAlacak,kur,A,canDelete})
             return (<>
               <div className="flex gap-1.5">
                 <select value={thPb} onChange={e=>setTh({...th,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${thPb!=="TL"?C.gold:C.hair}`,background:C.paper,color:thPb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
-                <input value={th.tutar} onChange={e=>setTh({...th,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+                <input value={th.tutar} onChange={e=>setTh({...th,tutar:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
               </div>
               {thPb!=="TL"&&thTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(thTL)} tahsil</div>}
             </>);
@@ -520,7 +524,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
                 <div><Lbl>Miktar (ops.)</Lbl>
                   <div className="flex gap-1.5">
                     <select value={olcu} onChange={e=>setMg({...mg,olcu:e.target.value})} className="rounded-lg px-2 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>{["metre","kilo","adet","top","paket"].map(o=><option key={o} value={o}>{o}</option>)}</select>
-                    <input value={mg.adet} onChange={e=>setMg({...mg,adet:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+                    <input value={mg.adet} onChange={e=>setMg({...mg,adet:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
                   </div>
                 </div>
                 <div>
@@ -529,7 +533,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
                     <select value={pb} onChange={e=>setMg({...mg,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:pb!=="TL"?C.gold:C.ink}}>
                       <option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option>
                     </select>
-                    <input value={mg.birim} onChange={e=>setMg({...mg,birim:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+                    <input value={mg.birim} onChange={e=>setMg({...mg,birim:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
                   </div>
                   {pb!=="TL"&&birimTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>birim ≈ ₺{d2(birimTL)}</div>}
                 </div>
@@ -537,7 +541,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
                   <Lbl>{otoTutar>0?"Tutar ₺ (otomatik)":"Tutar ₺"}</Lbl>
                   {otoTutar>0
                     ? <div className="w-full rounded-lg px-3 py-2 text-sm tabular-nums font-semibold" style={{border:`1px solid ${C.hair}`,background:C.paper,color:C.ink}}>{tl(otoTutar)}</div>
-                    : <input value={mg.tutar} onChange={e=>setMg({...mg,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>}
+                    : <input value={mg.tutar} onChange={e=>setMg({...mg,tutar:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>}
                   {efTutar>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ {dov(efTutar,kur)}</div>}
                 </div>
                 <div><Lbl>Ödeme</Lbl><select value={mg.odeme} onChange={e=>setMg({...mg,odeme:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="veresiye">Veresiye</option><option value="peşin">Peşin</option></select></div>
@@ -563,7 +567,7 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
                 <div className="col-span-2"><Lbl>Tutar</Lbl>
                   <div className="flex gap-1.5">
                     <select value={odPb} onChange={e=>setOd({...od,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${odPb!=="TL"?C.gold:C.hair}`,background:C.paper,color:odPb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
-                    <input value={od.tutar} onChange={e=>setOd({...od,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+                    <input value={od.tutar} onChange={e=>setOd({...od,tutar:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
                   </div>
                   {odPb!=="TL"&&odTL>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(odTL)} ödenecek</div>}
                 </div>
@@ -652,7 +656,7 @@ function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDel
           <div><Lbl>Tutar</Lbl>
             <div className="flex gap-1.5">
               <select value={f.pb||"TL"} onChange={e=>setF({...f,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${(f.pb&&f.pb!=="TL")?C.gold:C.hair}`,background:C.paper,color:(f.pb&&f.pb!=="TL")?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
-              <input value={f.tutar} onChange={e=>setF({...f,tutar:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+              <input value={f.tutar} onChange={e=>setF({...f,tutar:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
             </div>
             {f.pb&&f.pb!=="TL"&&parse(f.tutar)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(f.tutar)*(f.pb==="USD"?kur.usd:kur.eur))}</div>}
           </div>
@@ -757,8 +761,8 @@ function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
   const eK=kaynak==="canli"?`canlı · ${zaman}`:kaynak==="elle"?"elle girildi":"varsayılan";
   if(duzenle) return (
     <div className="flex flex-wrap items-end gap-3 mb-5 rounded-xl border p-3" style={{background:C.surface,borderColor:C.hair}}>
-      <div className="w-28"><Lbl>USD/TRY</Lbl><input value={tmp.usd} onChange={e=>setTmp({...tmp,usd:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
-      <div className="w-28"><Lbl>EUR/TRY</Lbl><input value={tmp.eur} onChange={e=>setTmp({...tmp,eur:e.target.value})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+      <div className="w-28"><Lbl>USD/TRY</Lbl><input value={tmp.usd} onChange={e=>setTmp({...tmp,usd:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+      <div className="w-28"><Lbl>EUR/TRY</Lbl><input value={tmp.eur} onChange={e=>setTmp({...tmp,eur:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
       <button onClick={kaydet} className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}><Check size={15}/> Kaydet</button>
       <button onClick={()=>setDuzenle(false)} className="rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Vazgeç</button>
     </div>
@@ -783,7 +787,7 @@ function KurBar({kur,kaynak,durum,zaman,onCek,onElle}){
           ))}
         </div>
         <div className="relative flex-1 min-w-[110px]">
-          <input value={cev} onChange={e=>setCev(e.target.value)} inputMode="decimal" placeholder="Tutar girin"
+          <input value={cev} onChange={e=>setCev(fmtInput(e.target.value))} inputMode="decimal" placeholder="Tutar girin"
             className="w-full rounded-full pl-3 pr-7 py-2 text-sm font-semibold outline-none tabular-nums text-right"
             style={{border:`1px solid ${C.hair}`,background:C.surface,color:C.ink}}/>
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold" style={{color:C.inkSoft,pointerEvents:"none"}}>{cevSym[cevPb]}</span>
@@ -822,7 +826,7 @@ function Ozetcik({etiket,deger,renk=C.ink,alt,dov:dovStr}){
     {alt&&<div className="text-xs" style={{color:C.inkSoft}}>{alt}</div>}</div>);
 }
 function Inp({label,v,set,num,cls=""}){
-  return (<div className={cls}><Lbl>{label}</Lbl><input value={v} onChange={e=>set(e.target.value)} inputMode={num?"decimal":"text"} className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${num?"tabular-nums":""}`} style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>);
+  return (<div className={cls}><Lbl>{label}</Lbl><input value={v} onChange={e=>set(num?fmtInput(e.target.value):e.target.value)} inputMode={num?"decimal":"text"} className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${num?"tabular-nums":""}`} style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>);
 }
 function Lbl({children}){return <label className="block text-xs font-medium mb-1.5" style={{color:C.inkSoft}}>{children}</label>;}
 function Tablo({children,bare}){return <div className={bare?"overflow-x-auto":"rounded-xl border overflow-x-auto"} style={bare?{}:{background:C.surface,borderColor:C.hair}}><table className="w-full text-sm">{children}</table></div>;}
