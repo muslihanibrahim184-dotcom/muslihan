@@ -19,7 +19,7 @@ const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas"
 const fTarih=(iso)=>{ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); return `${String(d.getDate()).padStart(2,"0")} ${AYLAR[d.getMonth()]} ${d.getFullYear()}`; };
 const parse=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0;
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v19"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v20"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -313,14 +313,16 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
       <div className="relative max-w-xs"><Search size={15} color={C.inkSoft} className="absolute left-3 top-1/2 -translate-y-1/2"/>
         <input value={arama} onChange={e=>setArama(e.target.value)} placeholder="Ürün ara..." className="w-full rounded-lg pl-9 pr-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
       <Tablo><thead><Tr head><Th>Ürün</Th><Th>Kategori</Th><Th r>Stok</Th><Th r>Giriş</Th><Th r>Satış</Th><Th r>Birim Kâr</Th><Th r>Marj</Th><Th></Th></Tr></thead><tbody>
-        {goster.map(s=>{const dusuk=kritikMi(s),kar=N(s.satis)-N(s.giris),marj=N(s.satis)?Math.round(kar/N(s.satis)*100):0; return(
+        {goster.map(s=>{const dusuk=kritikMi(s),kar=N(s.satis)-N(s.giris),marj=N(s.satis)?Math.round(kar/N(s.satis)*100):0;
+          const gun=s.created_at?Math.floor((Date.now()-new Date(s.created_at).getTime())/86400000):null;
+          const gToplam=N(s.stok)*N(s.giris), sToplam=N(s.stok)*N(s.satis), kToplam=N(s.stok)*kar; return(
           <Tr key={s.id}>
-            <Td><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}</div></Td>
+            <Td><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}</div>{s.created_at&&<div className="text-xs" style={{color:C.inkSoft}}>eklendi {fTarih(s.created_at.slice(0,10))}{gun!=null&&` · ${gun<=0?"bugün":gun+" gün önce"}`}</div>}</Td>
             <Td><Rozet renk={C.gold} bg={C.goldBg}>{s.kategori}</Rozet></Td>
             <Td r><span className="tabular-nums font-semibold" style={{color:dusuk?C.gider:C.ink}}>{sayi(s.stok)} {s.birim}</span>{dusuk&&<div className="text-xs" style={{color:C.gider}}>kritik</div>}</Td>
-            <Td r mono>{tl(s.giris)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.giris),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(N(s.stok)*N(s.giris))}</div></Td>
-            <Td r mono>{tl(s.satis)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.satis),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(N(s.stok)*N(s.satis))}</div></Td>
-            <Td r mono><div className="font-medium" style={{color:C.gelir}}>{tl(kar)}</div><div className="text-xs" style={{color:C.inkSoft}}>{dov(kar,kur)}</div><div className="text-xs font-semibold" style={{color:kar>=0?C.gelir:C.gider}}>toplam {tl(N(s.stok)*kar)}</div></Td>
+            <Td r mono>{tl(s.giris)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.giris),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(gToplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(gToplam,kur)}</div></Td>
+            <Td r mono>{tl(s.satis)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.satis),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(sToplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(sToplam,kur)}</div></Td>
+            <Td r mono><div className="font-medium" style={{color:kar>=0?C.gelir:C.gider}}>{tl(kar)}</div><div className="text-xs" style={{color:C.inkSoft}}>{dov(kar,kur)}</div><div className="text-xs font-semibold" style={{color:kToplam>=0?C.gelir:C.gider}}>toplam {tl(kToplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(kToplam,kur)}</div></Td>
             <Td r mono style={{color:C.gelir}}>%{marj}</Td>
             <Td r><div className="flex items-center justify-end gap-1">
               <button onClick={()=>duzenleAc(s)} className="p-1.5 rounded" title="Düzenle"><Pencil size={15} color={C.inkSoft}/></button>
