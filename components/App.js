@@ -23,7 +23,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v23"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v24"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -104,7 +104,7 @@ export default function App({ session }) {
     addSupplier:(s)=>run(()=>db.addSupplier(s)), updateSupplier:(id,patch)=>run(()=>db.updateSupplier(id,patch)), deleteSupplier:(id)=>run(()=>db.deleteSupplier(id)),
     purchase:(id,ac,tutar,odeme,tarih)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPurchase(t,ac,tutar,odeme,tarih)); },
     pay:(id,tutar,aciklama,tarih)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPay(t,tutar,aciklama,tarih)); },
-    addCheque:(c)=>run(()=>db.addCheque(c)), deleteCheque:(id)=>run(()=>db.deleteCheque(id)), chequeStatus:(c,d)=>run(()=>db.setChequeStatus(c,d)),
+    addCheque:(c)=>run(()=>db.addCheque(c)), updateCheque:(id,p)=>run(()=>db.updateCheque(id,p)), deleteCheque:(id)=>run(()=>db.deleteCheque(id)), chequeStatus:(c,d)=>run(()=>db.setChequeStatus(c,d)),
   };
 
   const TUM=[
@@ -628,6 +628,13 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
 function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
   const [f,setF]=useState({tip:"alinan",tur:"Çek",kisi:"",banka:"",tutar:"",pb:"TL",vade:TODAY,notu:""}); const [filtre,setFiltre]=useState("hepsi");
+  const [duzenle,setDuzenle]=useState(null);
+  const toTr=(n)=>String(Math.round(Number(n)*100)/100).replace(".",",");
+  const duzenleAc=(c)=>setDuzenle({id:c.id,tip:c.tip,tur:c.tur,kisi:c.kisi,banka:c.banka==="—"?"":c.banka,pb:"TL",tutar:fmtInput(toTr(c.tutar)),vade:c.vade,notu:c.notu||""});
+  const duzenleKaydet=async()=>{ const d=duzenle; if(!d.kisi.trim()||parse(d.tutar)<=0)return;
+    const c=d.pb==="USD"?kur.usd:d.pb==="EUR"?kur.eur:1; const tutarTL=parse(d.tutar)*c;
+    await A.updateCheque(d.id,{tip:d.tip,tur:d.tur,kisi:d.kisi.trim(),banka:d.banka||"—",tutar:tutarTL,vade:d.vade,notu:d.notu||""});
+    setDuzenle(null); };
   const DURUMLAR={alinan:["Portföyde","Tahsil Edildi","Ciro Edildi","Karşılıksız"],verilen:["Beklemede","Ödendi","Karşılıksız"]};
   const dR=(d)=>({"Portföyde":C.gold,"Beklemede":C.gold,"Tahsil Edildi":C.gelir,"Ödendi":C.gelir,"Ciro Edildi":C.inkSoft,"Karşılıksız":C.gider}[d]||C.inkSoft);
   const dB=(d)=>({"Portföyde":C.goldBg,"Beklemede":C.goldBg,"Tahsil Edildi":C.gelirBg,"Ödendi":C.gelirBg,"Ciro Edildi":C.hair,"Karşılıksız":C.giderBg}[d]||C.hair);
@@ -676,10 +683,35 @@ function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDel
             <Td r mono bold style={{color:c.tip==="alinan"?C.gelir:C.gider}}>{c.tip==="alinan"?"+":"−"}{tl(c.tutar)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(c.tutar,kur)}</div></Td>
             <Td><Rozet renk={c.tip==="alinan"?C.gelir:C.gider} bg={c.tip==="alinan"?C.gelirBg:C.giderBg}>{c.tip==="alinan"?"alınan":"verilen"}</Rozet></Td>
             <Td><select value={c.durum} onChange={e=>A.chequeStatus(c,e.target.value)} className="rounded px-2 py-1 text-xs font-medium outline-none" style={{background:dB(c.durum),color:dR(c.durum),border:"none"}}>{DURUMLAR[c.tip].map(d=><option key={d}>{d}</option>)}</select></Td>
-            <Td>{canDelete&&<SilBtn onClick={()=>A.deleteCheque(c.id)}/>}</Td>
+            <Td><div className="flex items-center justify-end gap-1">
+              <button onClick={()=>duzenleAc(c)} className="p-1.5 rounded" title="Düzenle"><Pencil size={15} color={C.inkSoft}/></button>
+              {canDelete&&<SilBtn onClick={()=>A.deleteCheque(c.id)}/>}
+            </div></Td>
           </Tr>);})}
         {goster.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Kayıt yok.</span></Td></Tr>}
       </tbody></Tablo>
+      {duzenle&&(<Modal title="Çek / Senet Düzenle" onClose={()=>setDuzenle(null)}>
+        <div className="flex flex-wrap gap-2 mb-3">{[["alinan","Alınan (bana verilen)"],["verilen","Verilen (benim yazdığım)"]].map(([k,l])=>{const a=duzenle.tip===k;return(
+          <button key={k} onClick={()=>setDuzenle({...duzenle,tip:k})} className="rounded-lg px-3 py-2 text-sm font-medium" style={{background:a?C.ink:"transparent",color:a?"#fff":C.inkSoft,border:`1px solid ${a?C.ink:C.hair}`}}>{l}</button>);})}</div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Lbl>Tür</Lbl><select value={duzenle.tur} onChange={e=>setDuzenle({...duzenle,tur:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option>Çek</option><option>Senet</option></select></div>
+          <div><Lbl>{duzenle.tip==="alinan"?"Kimden":"Kime"}</Lbl><input list="cek-kisi-d" value={duzenle.kisi} onChange={e=>setDuzenle({...duzenle,kisi:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/><datalist id="cek-kisi-d">{(duzenle.tip==="alinan"?customers:suppliers).map(k=><option key={k.id} value={k.ad}/>)}</datalist></div>
+          <div><Lbl>Banka</Lbl><input value={duzenle.banka} onChange={e=>setDuzenle({...duzenle,banka:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div><Lbl>Tutar</Lbl>
+            <div className="flex gap-1.5">
+              <select value={duzenle.pb} onChange={e=>setDuzenle({...duzenle,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${duzenle.pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:duzenle.pb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+              <input value={duzenle.tutar} onChange={e=>setDuzenle({...duzenle,tutar:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+            </div>
+            {duzenle.pb!=="TL"&&parse(duzenle.tutar)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(duzenle.tutar)*(duzenle.pb==="USD"?kur.usd:kur.eur))}</div>}
+          </div>
+          <div><Lbl>Vade</Lbl><input type="date" value={duzenle.vade} onChange={e=>setDuzenle({...duzenle,vade:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div className="col-span-2"><Lbl>Açıklama</Lbl><input value={duzenle.notu} onChange={e=>setDuzenle({...duzenle,notu:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={()=>setDuzenle(null)} className="rounded-lg px-4 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Vazgeç</button>
+          <button onClick={duzenleKaydet} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Güncelle</button>
+        </div>
+      </Modal>)}
     </div>
   );
 }
