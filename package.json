@@ -1,5 +1,16 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-};
-export default nextConfig;
+{
+  "name": "Muslihan Tekstil Mağaza",
+  "short_name": "Muslihan",
+  "description": "Satış, stok, müşteri, kumaşçı ve çek/senet takip sistemi",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FAF8F3",
+  "theme_color": "#16161D",
+  "lang": "tr",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

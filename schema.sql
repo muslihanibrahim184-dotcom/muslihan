@@ -1,57 +1,25 @@
-# Muslihan Tekstil Mağaza — Takip Sistemi
+-- ============================================================
+-- Çek/Senet'i tedarik rolüne açar.
+-- Supabase > SQL Editor'da TAMAMINI seçip Run'a basın.
+-- Veri silinmez; sadece çek tablosunun yetki kuralları güncellenir.
+-- NOT: Mevcut user_role() fonksiyonuna DOKUNULMAZ (zaten çalışıyor).
+-- ============================================================
 
-Mağaza satış odaklı yönetim paneli: **Satış, Ürünler (giriş/satış fiyatı & kâr), Müşteriler (iletişim + alacak/borç), Kumaşçılar, Tedarikçiler, Çek/Senet** ve Genel Bakış. Üstte canlı **USD/TRY · EUR/TRY** kuru; borç/bakiye değerleri TL + USD/EUR gösterilir.
+alter table public.cheques enable row level security;
 
-- **Next.js 14 + Supabase (giriş + veritabanı) + Tailwind**, **PWA**, responsive
-- **Rol tabanlı yetkilendirme** (hem arayüzde hem veritabanı RLS'inde)
+drop policy if exists sel on public.cheques;
+drop policy if exists ins on public.cheques;
+drop policy if exists upd on public.cheques;
+drop policy if exists del on public.cheques;
 
-## Roller
-- **Yönetici (admin):** her şeyi yapar — ekler, düzenler, **siler**, kullanıcı rollerini yönetir.
-- **Editör (editor):** her şeyi görür, ekler/düzenler ama **silemez**.
-- **Tedarik (tedarik):** yalnızca **Kumaşçılar + Tedarikçiler** ekranını görür; müşteri bilgileri, günlük satış ve kasayı **göremez**.
+create policy sel on public.cheques for select to authenticated
+  using (public.user_role() in ('admin','editor','tedarik'));
 
-## Kurulum
+create policy ins on public.cheques for insert to authenticated
+  with check (public.user_role() in ('admin','editor','tedarik'));
 
-### 1) Supabase
-1. https://supabase.com → yeni proje.
-2. **SQL Editor** → `schema.sql` dosyasının tamamını çalıştır (tablolar + roller + RLS).
-3. **Authentication > Email** açık olsun; hızlı başlangıç için **"Confirm email"** kapatılabilir.
-4. **Project Settings > API** → `Project URL` ve `anon public` anahtarını kopyala.
+create policy upd on public.cheques for update to authenticated
+  using (public.user_role() in ('admin','editor','tedarik'));
 
-### 2) Ortam değişkenleri (`.env.local` / Vercel)
-```
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
-# Sadece sunucu (admin şifre değiştirme) — ASLA NEXT_PUBLIC yapma:
-SUPABASE_SECRET_KEY=sb_secret_xxxx
-```
-
-> **SUPABASE_SECRET_KEY**: Supabase > Settings > API Keys > Secret key (sb_secret_...) ya da
-> Legacy tab'daki service_role. Yöneticinin başka kullanıcıların şifresini değiştirmesi için
-> gerekir. Tarayıcıya gitmez; sadece sunucu API route'unda kullanılır. Vercel'de de aynı
-> isimle Environment Variables'a ekleyin.
-
-### 3) İlk kullanıcı + admin yapma
-- Uygulamadan "Kayıt ol" ile ya da Supabase panelinden kullanıcı oluştur.
-- **Yeni kullanıcılar varsayılan olarak `tedarik` rolündedir.** Kendini admin yapmak için SQL Editor'da:
-```sql
-update public.profiles set role='admin'
-where id = (select id from auth.users where email='SIZIN@EPOSTA.com');
-```
-- Sonrasında admin, uygulamadaki **Kullanıcılar** sekmesinden diğer kullanıcıların rolünü değiştirebilir.
-
-### 4) Çalıştırma / Dağıtım
-```bash
-npm install
-npm run dev
-```
-GitHub'a push → Vercel'de repo seç → Environment Variables ekle → Deploy. Telefonda "Ana ekrana ekle" ile PWA kurulur.
-
-## İş mantığı
-- **Satış** → stoktan düşer, kâr hesaplanır; peşin ise kasaya, veresiye ise müşteri borcuna yazılır (silinince geri alınır).
-- **Tahsilat / Ödeme / Mal girişi** kasayı ve cari bakiyeyi otomatik günceller.
-- **Çek/Senet**: Alınan "Tahsil Edildi" → kasa girişi; Verilen "Ödendi" → kasa çıkışı; vadesi geçenler uyarılır.
-
-## Notlar
-- Güvenlik veritabanı seviyesinde RLS ile zorlanır; arayüzdeki gizlemeler ek kolaylıktır.
-- `tedarik` rolü müşteri/satış/kasa tablolarını **okuyamaz** (RLS engeller), sadece kumaşçı/tedarikçi işler.
+create policy del on public.cheques for delete to authenticated
+  using (public.user_role() = 'admin');
