@@ -23,7 +23,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v25"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v27"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -81,7 +81,7 @@ export default function App({ session }) {
 
   const { products, customers, suppliers, sales, collections, supplierMov, cash, cheques, orders=[] } = data;
   const canDelete = rol==="admin";
-  const giderler=[...cash].filter(c=>c.kategori==="gider").sort((a,b)=>((a.tarih||a.created_at)<(b.tarih||b.created_at)?1:-1));
+  const giderler=[...cash].filter(c=>c.kategori==="gider"||(c.tip==="cikis"&&String(c.aciklama||"").startsWith("[Gider]"))).sort((a,b)=>((a.tarih||a.created_at)<(b.tarih||b.created_at)?1:-1));
   const toplamGider=giderler.reduce((a,b)=>a+N(b.amount),0);
   const acikSiparis=orders.filter(o=>o.durum!=="Teslim Edildi"&&o.durum!=="İptal").length;
   const stokDeger=products.reduce((a,b)=>a+N(b.stok)*N(b.giris),0);
@@ -482,7 +482,7 @@ function Musteriler({customers,sales,collections,orders=[],musteriAlacak,kur,A,c
         <h4 className="text-xs font-semibold uppercase tracking-wider mt-4 mb-2" style={{color:C.inkSoft}}>Siparişler</h4>
         <div className="rounded-lg border p-3 mb-3" style={{borderColor:C.hair,background:C.paper}}>
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="col-span-2"><Lbl>Açıklama (ne sipariş edildi?)</Lbl><input value={sip.aciklama} onChange={e=>setSip({...sip,aciklama:e.target.value})} placeholder="ör. 50 adet özel şortlu takım" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
+            <div className="col-span-2"><Lbl>Açıklama (her satıra bir kalem)</Lbl><textarea value={sip.aciklama} onChange={e=>setSip({...sip,aciklama:e.target.value})} rows={3} placeholder={"ör.\n500 adet dalgıç takım kırmızı/siyah/mavi\n500 tişört\n500 kapri"} className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
             <div><Lbl>Toplam Tutar ₺</Lbl><input value={sip.toplam} onChange={e=>setSip({...sip,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
             <div><Lbl>Kapora ₺</Lbl>
               <div className="flex gap-1.5">
@@ -497,7 +497,7 @@ function Musteriler({customers,sales,collections,orders=[],musteriAlacak,kur,A,c
           <div className="flex justify-end mt-2"><button onClick={sipEkle} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Sipariş Ekle</button></div>
         </div>
         <Tablo bare><tbody>{orders.filter(o=>o.musteri_id===detay.id).map(o=>(<Tr key={o.id}>
-          <Td><div className="font-medium">{o.aciklama||"Sipariş"}</div><div className="text-xs" style={{color:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}`:""}{o.notu?` · ${o.notu}`:""}</div></Td>
+          <Td><div className="font-medium whitespace-pre-line">{o.aciklama||"Sipariş"}</div><div className="text-xs" style={{color:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}`:""}{o.notu?` · ${o.notu}`:""}</div></Td>
           <Td r mono><div className="font-semibold">{tl(o.toplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>kapora {tl(o.kapora)} · kalan {tl(N(o.toplam)-N(o.kapora))}</div></Td>
           <Td><Rozet renk={o.durum==="Teslim Edildi"?C.gelir:o.durum==="İptal"?C.gider:C.gold} bg={o.durum==="Teslim Edildi"?C.gelirBg:o.durum==="İptal"?C.giderBg:C.goldBg}>{o.durum}</Rozet></Td>
         </Tr>))}{orders.filter(o=>o.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Sipariş yok.</span></Td></Tr>}</tbody></Tablo>
@@ -776,7 +776,7 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
       {ac&&(<div className="rounded-xl border p-4" style={{background:C.surface,borderColor:C.hair}}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="col-span-2"><Lbl>Müşteri</Lbl><select value={f.musteriId} onChange={e=>setF({...f,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin (ops.)…</option>{customers.map(c=><option key={c.id} value={c.id}>{c.ad}</option>)}</select></div>
-          <div className="col-span-2"><Lbl>Açıklama</Lbl><input value={f.aciklama} onChange={e=>setF({...f,aciklama:e.target.value})} placeholder="ör. 50 adet özel şortlu takım" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div className="col-span-2"><Lbl>Açıklama (her satıra bir kalem)</Lbl><textarea value={f.aciklama} onChange={e=>setF({...f,aciklama:e.target.value})} rows={3} placeholder={"ör.\n500 adet dalgıç takım kırmızı/siyah/mavi\n500 tişört\n500 kapri"} className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
           <div><Lbl>Toplam ₺</Lbl><input value={f.toplam} onChange={e=>setF({...f,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
           <div><Lbl>Kapora ₺</Lbl><div className="flex gap-1.5">
             <input value={f.kapora} onChange={e=>setF({...f,kapora:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
@@ -792,7 +792,7 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
       <Tablo><thead><Tr head><Th>Sipariş</Th><Th>Müşteri</Th><Th r>Tutar</Th><Th>Durum</Th><Th></Th></Tr></thead><tbody>
         {goster.map(o=>{const gec=o.teslim&&o.teslim<TODAY&&o.durum!=="Teslim Edildi"&&o.durum!=="İptal"; return(
           <Tr key={o.id}>
-            <Td><div className="font-medium">{o.aciklama||"Sipariş"}</div><div className="text-xs" style={{color:gec?C.gider:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}${gec?" (geçti)":""}`:""}{o.notu?` · ${o.notu}`:""}</div></Td>
+            <Td><div className="font-medium whitespace-pre-line">{o.aciklama||"Sipariş"}</div><div className="text-xs" style={{color:gec?C.gider:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}${gec?" (geçti)":""}`:""}{o.notu?` · ${o.notu}`:""}</div></Td>
             <Td><span style={{color:C.inkSoft}}>{o.musteri_ad||"—"}</span></Td>
             <Td r mono><div className="font-semibold">{tl(o.toplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>kapora {tl(o.kapora)} · kalan {tl(N(o.toplam)-N(o.kapora))}</div></Td>
             <Td><select value={o.durum} onChange={e=>A.updateOrder(o.id,{durum:e.target.value})} className="rounded px-2 py-1 text-xs font-medium outline-none" style={{background:dBg(o.durum),color:dRenk(o.durum),border:"none"}}>{DURUMLAR.map(d=><option key={d}>{d}</option>)}</select></Td>
@@ -827,7 +827,7 @@ function Gider({giderler=[],toplamGider,kur,A,canDelete}){
       <Tablo><thead><Tr head><Th>Tarih</Th><Th>Açıklama</Th><Th r>Tutar</Th><Th></Th></Tr></thead><tbody>
         {giderler.map(g=>(<Tr key={g.id}>
           <Td><span className="tabular-nums" style={{color:C.inkSoft}}>{fTarih(g.tarih||(g.created_at||"").slice(0,10))}</span></Td>
-          <Td>{g.aciklama}</Td>
+          <Td>{String(g.aciklama||"").replace(/^\[Gider\]\s*/,"")}</Td>
           <Td r mono bold style={{color:C.gider}}>−{tl(g.amount)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(g.amount,kur)}</div></Td>
           <Td>{canDelete&&<SilBtn onClick={()=>A.deleteExpense(g.id)}/>}</Td>
         </Tr>))}
