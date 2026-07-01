@@ -23,7 +23,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v27"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v28"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -104,6 +104,7 @@ export default function App({ session }) {
     addProduct:(p)=>run(()=>db.addProduct(p)), updateProduct:(id,patch)=>run(()=>db.updateProduct(id,patch)), deleteProduct:(id)=>run(()=>db.deleteProduct(id)),
     addCustomer:(c)=>run(()=>db.addCustomer(c)), updateCustomer:(id,patch)=>run(()=>db.updateCustomer(id,patch)), deleteCustomer:(id)=>run(()=>db.deleteCustomer(id)),
     collect:(id,tutar,tarih)=>{ const m=customers.find(c=>c.id===id); if(!m||tutar<=0) return; return run(()=>db.collectFromCustomer(m,tutar,tarih)); },
+    customerReturn:({musteriId,urunId,adet,tutar,tur,tarih,aciklama})=>{ const m=customers.find(c=>c.id===musteriId); if(!m) return; const urun=products.find(p=>p.id===urunId)||null; return run(()=>db.customerReturn({musteri:m,urun,adet,tutar,tur,tarih,aciklama})); },
     addSupplier:(s)=>run(()=>db.addSupplier(s)), updateSupplier:(id,patch)=>run(()=>db.updateSupplier(id,patch)), deleteSupplier:(id)=>run(()=>db.deleteSupplier(id)),
     purchase:(id,ac,tutar,odeme,tarih)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPurchase(t,ac,tutar,odeme,tarih)); },
     pay:(id,tutar,aciklama,tarih)=>{ const t=suppliers.find(s=>s.id===id); if(!t||tutar<=0) return; return run(()=>db.supplierPay(t,tutar,aciklama,tarih)); },
@@ -163,7 +164,7 @@ export default function App({ session }) {
         {aktif==="ozet" && <Ozet {...{stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,kumasciBorc,tedarikciBorc,alinanCek,verilenCek,cheques,sales,products,kur}} git={setSekme}/>}
         {aktif==="satis" && <Satis {...{products,customers,sales,kur,A,canDelete}}/>}
         {aktif==="urun" && <Urunler {...{products,stokDeger,kur,A,canDelete}}/>}
-        {aktif==="musteri" && <Musteriler {...{customers,sales,collections,orders,musteriAlacak,kur,A,canDelete}}/>}
+        {aktif==="musteri" && <Musteriler {...{customers,sales,collections,orders,products,musteriAlacak,kur,A,canDelete}}/>}
         {aktif==="siparis" && <Siparisler {...{orders,customers,kur,A,canDelete,rol}}/>}
         {aktif==="kumasci" && <SupplierScreen grup="kumasci" toplam={kumasciBorc} kur={kur} {...{suppliers,supplierMov,A,canDelete}}/>}
         {aktif==="ted" && <SupplierScreen grup="tedarikci" toplam={tedarikciBorc} kur={kur} {...{suppliers,supplierMov,A,canDelete}}/>}
@@ -180,9 +181,13 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
   const sonSatis=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1)).slice(0,5);
   const kritikler=products.filter(kritikMi);
   const yaklasan=[...cheques].filter(c=>c.durum==="Portföyde"||c.durum==="Beklemede").sort((a,b)=>a.vade.localeCompare(b.vade)).slice(0,5);
+  const gunAgg={}; sales.forEach(s=>{const g=(s.tarih||"").slice(0,10); if(!g)return; const o=gunAgg[g]||(gunAgg[g]={ciro:0,kar:0,iade:0,n:0}); o.ciro+=N(s.tutar); o.kar+=N(s.kar); if(s.odeme==="iade") o.iade+=Math.abs(N(s.tutar)); else o.n+=1;});
+  const gunler=Object.entries(gunAgg).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,14);
+  const bugunCiro=gunAgg[TODAY]?.ciro||0, bugunKar=gunAgg[TODAY]?.kar||0;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <KPI etiket="Bugünkü Ciro" deger={tl(bugunCiro)} dov={dov(bugunCiro,kur)} alt={`bugünkü kâr ${tl(bugunKar)}`} renk={C.gelir} icon={<CalendarClock size={18} color={C.gelir}/>} bg={C.gelirBg} onClick={()=>git("satis")}/>
         <KPI etiket="Toplam Satış" deger={tl(toplamSatis)} dov={dov(toplamSatis,kur)} alt={`${sales.length} işlem`} icon={<ShoppingCart size={18} color={C.ink}/>} bg="#F1EEE6" onClick={()=>git("satis")}/>
         <KPI etiket="Toplam Kâr" deger={tl(toplamKar)} dov={dov(toplamKar,kur)} alt="giriş–satış farkı" renk={toplamKar>=0?C.gelir:C.gider} icon={<TrendingUp size={18} color={toplamKar>=0?C.gelir:C.gider}/>} bg={toplamKar>=0?C.gelirBg:C.giderBg} onClick={()=>git("satis")}/>
         <KPI etiket="Kasa" deger={tl(kasaBakiye)} dov={dov(kasaBakiye,kur)} alt="peşin nakit" renk={C.gold} icon={<Coins size={18} color={C.gold}/>} bg={C.goldBg}/>
@@ -193,6 +198,18 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
         <KPI etiket="Alınan Çek" deger={tl(alinanCek)} dov={dov(alinanCek,kur)} alt="portföyde" renk={C.gelir} icon={<ScrollText size={18} color={C.gelir}/>} bg={C.gelirBg} onClick={()=>git("cek")}/>
         <KPI etiket="Verilen Çek" deger={tl(verilenCek)} dov={dov(verilenCek,kur)} alt="vadesi gelecek" renk={C.gider} icon={<ScrollText size={18} color={C.gider}/>} bg={C.giderBg} onClick={()=>git("cek")}/>
       </div>
+      <div className="rounded-xl border overflow-hidden" style={{background:C.surface,borderColor:C.hair}}>
+        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider px-4 pt-4 pb-2" style={{color:C.inkSoft}}><CalendarClock size={14}/> Günlük Ciro <span className="normal-case font-normal" style={{color:C.inkSoft}}>· son {gunler.length} gün</span></h3>
+        <Tablo bare><thead><Tr head><Th>Tarih</Th><Th r>Ciro</Th><Th r>İade</Th><Th r>Kâr</Th></Tr></thead><tbody>
+          {gunler.map(([g,o])=>(<Tr key={g}>
+            <Td><span className="tabular-nums" style={{color:g===TODAY?C.ink:C.inkSoft,fontWeight:g===TODAY?700:400}}>{fTarih(g)}{g===TODAY?" · bugün":""}</span></Td>
+            <Td r mono bold style={{color:N(o.ciro)>=0?C.ink:C.gider}}>{tl(o.ciro)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(o.ciro,kur)}</div></Td>
+            <Td r mono style={{color:C.gider}}>{o.iade>0?"−"+tl(o.iade):"—"}</Td>
+            <Td r mono style={{color:N(o.kar)>=0?C.gelir:C.gider}}>{tl(o.kar)}</Td>
+          </Tr>))}
+          {gunler.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz satış yok.</span></Td></Tr>}
+        </tbody></Tablo>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 rounded-xl border overflow-hidden" style={{background:C.surface,borderColor:C.hair}}>
           <h3 className="text-sm font-semibold uppercase tracking-wider px-4 pt-4 pb-2" style={{color:C.inkSoft}}>Son Satışlar</h3>
@@ -201,7 +218,7 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
               <Td><span className="tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
               <Td><div className="font-medium">{s.urun_ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{sayi(s.adet)} adet · {s.musteri_ad}</div></Td>
               <Td r mono bold>{tl(s.tutar)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(s.tutar,kur)}</div></Td><Td r mono style={{color:N(s.kar)>=0?C.gelir:C.gider}}>{tl(s.kar)}</Td>
-              <Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
+              <Td><Rozet renk={s.odeme==="iade"?C.gider:s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="iade"?C.giderBg:s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme==="iade"?"İade":s.odeme}</Rozet></Td>
             </Tr>))}
             {sonSatis.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz satış yok.</span></Td></Tr>}
           </tbody></Tablo>
@@ -298,7 +315,7 @@ function Satis({products,customers,sales,kur,A,canDelete}){
           <Td><span className="tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
           <Td><div className="font-medium">{s.urun_ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.musteri_ad}</div></Td>
           <Td r mono>{sayi(s.adet)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>birim {tl(N(s.birim_fiyat)||(N(s.adet)?N(s.tutar)/N(s.adet):0))}</div></Td><Td r mono bold>{tl(s.tutar)}</Td><Td r mono style={{color:N(s.kar)>=0?C.gelir:C.gider}}>{tl(s.kar)}</Td>
-          <Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
+          <Td><Rozet renk={s.odeme==="iade"?C.gider:s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="iade"?C.giderBg:s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme==="iade"?"İade":s.odeme}</Rozet></Td>
           <Td>{canDelete&&<SilBtn onClick={()=>A.deleteSale(s)}/>}</Td>
         </Tr>))}
         {liste.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz satış yok.</span></Td></Tr>}
@@ -382,11 +399,18 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
 }
 
 // === MÜŞTERİLER =============================================================
-function Musteriler({customers,sales,collections,orders=[],musteriAlacak,kur,A,canDelete}){
+function Musteriler({customers,sales,collections,orders=[],products=[],musteriAlacak,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",telefon:"",adres:"",vergi_no:"",notu:"",acilis:""});
   const [th,setTh]=useState({musteriId:"",tutar:"",pb:"TL",tarih:TODAY}); const [detay,setDetay]=useState(null);
   const [sip,setSip]=useState({aciklama:"",toplam:"",kapora:"",notu:"",teslim:""});
+  const [iade,setIade]=useState({urunId:"",adet:"",tutar:"",tur:"hesap",tarih:TODAY,aciklama:""});
+  const iadeYap=async()=>{ if(!detay) return; const tutar=parse(iade.tutar),adet=parse(iade.adet);
+    const urun=products.find(p=>p.id===iade.urunId)||null;
+    const efTutar = tutar>0 ? tutar : (urun? adet*N(urun.satis):0);
+    if(efTutar<=0 && !(urun&&adet>0)) return;
+    await A.customerReturn({musteriId:detay.id,urunId:urun?.id||null,adet,tutar:efTutar,tur:iade.tur,tarih:iade.tarih,aciklama:iade.aciklama.trim()});
+    setIade({urunId:"",adet:"",tutar:"",tur:iade.tur,tarih:iade.tarih,aciklama:""}); };
   const sipEkle=async()=>{ if(!detay) return; const toplam=parse(sip.toplam), kapora=parse(sip.kapora);
     if(!sip.aciklama.trim()&&toplam<=0) return;
     await A.addOrder({musteri_id:detay.id,musteri_ad:detay.ad,aciklama:sip.aciklama.trim(),toplam,kapora,notu:sip.notu.trim(),teslim:sip.teslim||null,tarih:TODAY});
@@ -472,12 +496,28 @@ function Musteriler({customers,sales,collections,orders=[],musteriAlacak,kur,A,c
         <Tablo bare><tbody>{sales.filter(s=>s.musteri_id===detay.id).map(s=>{const bfiyat=N(s.birim_fiyat)||(N(s.adet)?N(s.tutar)/N(s.adet):0); return(<Tr key={s.id}>
           <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(s.tarih)}</span></Td>
           <Td><div>{s.urun_ad} <span style={{color:C.inkSoft}}>×{sayi(s.adet)}</span></div><div className="text-xs tabular-nums" style={{color:C.inkSoft}}>birim {tl(bfiyat)}</div></Td>
-          <Td r mono bold>{tl(s.tutar)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(s.tutar,kur)}</div></Td><Td><Rozet renk={s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme}</Rozet></Td>
+          <Td r mono bold>{tl(s.tutar)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(s.tutar,kur)}</div></Td><Td><Rozet renk={s.odeme==="iade"?C.gider:s.odeme==="peşin"?C.gelir:C.gold} bg={s.odeme==="iade"?C.giderBg:s.odeme==="peşin"?C.gelirBg:C.goldBg}>{s.odeme==="iade"?"İade":s.odeme}</Rozet></Td>
         </Tr>);})}{sales.filter(s=>s.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz mal alımı yok.</span></Td></Tr>}</tbody></Tablo>
         <h4 className="text-xs font-semibold uppercase tracking-wider mt-4 mb-2" style={{color:C.inkSoft}}>Tahsilatlar</h4>
         <Tablo bare><tbody>{collections.filter(t=>t.musteri_id===detay.id).map(t=>(<Tr key={t.id}>
           <Td><span className="text-xs tabular-nums" style={{color:C.inkSoft}}>{fTarih(t.tarih)}</span></Td><Td>Tahsilat</Td><Td r mono bold style={{color:C.gelir}}>{tl(t.tutar)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(t.tutar,kur)}</div></Td>
         </Tr>))}{collections.filter(t=>t.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Tahsilat yok.</span></Td></Tr>}</tbody></Tablo>
+
+        <h4 className="text-xs font-semibold uppercase tracking-wider mt-4 mb-2" style={{color:C.inkSoft}}>İade Al</h4>
+        <div className="rounded-lg border p-3 mb-3" style={{borderColor:C.hair,background:C.paper}}>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="col-span-2"><Lbl>Ürün (ops. — seçilirse stoğa geri eklenir)</Lbl><select value={iade.urunId} onChange={e=>setIade({...iade,urunId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}><option value="">Ürünsüz (sadece tutar)…</option>{products.map(p=><option key={p.id} value={p.id}>{p.ad}</option>)}</select></div>
+            <div><Lbl>Adet (ops.)</Lbl><input value={iade.adet} onChange={e=>setIade({...iade,adet:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
+            <div><Lbl>İade Tutarı ₺</Lbl><input value={iade.tutar} onChange={e=>setIade({...iade,tutar:fmtInput(e.target.value)})} inputMode="decimal" placeholder={(()=>{const u=products.find(p=>p.id===iade.urunId);const a=parse(iade.adet);return u&&a>0?tl(a*N(u.satis)):"";})()} className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
+            <div className="col-span-2"><Lbl>İade Türü</Lbl><div className="flex gap-1.5">
+              {[["hesap","Hesaptan düş (borcu azalır)"],["nakit","Nakit iade (kasadan çıkar)"]].map(([k,l])=>{const a=iade.tur===k;return(
+                <button key={k} onClick={()=>setIade({...iade,tur:k})} className="flex-1 rounded-lg py-2 text-xs font-medium" style={{background:a?C.ink:"transparent",color:a?"#fff":C.inkSoft,border:`1px solid ${a?C.ink:C.hair}`}}>{l}</button>);})}
+            </div></div>
+            <div><Lbl>Tarih</Lbl><input type="date" value={iade.tarih} onChange={e=>setIade({...iade,tarih:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
+            <div><Lbl>Açıklama (ops.)</Lbl><input value={iade.aciklama} onChange={e=>setIade({...iade,aciklama:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
+          </div>
+          <div className="flex justify-end mt-2"><button onClick={iadeYap} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gider}}>İade Al</button></div>
+        </div>
 
         <h4 className="text-xs font-semibold uppercase tracking-wider mt-4 mb-2" style={{color:C.inkSoft}}>Siparişler</h4>
         <div className="rounded-lg border p-3 mb-3" style={{borderColor:C.hair,background:C.paper}}>
