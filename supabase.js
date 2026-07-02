@@ -1,29 +1,32 @@
-import "./globals.css";
-import PwaRegister from "@/lib/pwa";
+"use client";
+import { useEffect } from "react";
 
-export const metadata = {
-  title: "Muslihan Tekstil Mağaza",
-  description: "Satış, stok, müşteri, kumaşçı ve çek/senet takip sistemi",
-  manifest: "/manifest.webmanifest",
-  icons: { icon: "/favicon.png", apple: "/apple-touch-icon.png" },
-  appleWebApp: { capable: true, title: "Muslihan", statusBarStyle: "default" },
-};
+export default function PwaRegister() {
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (process.env.NODE_ENV !== "production") return;
 
-export const viewport = {
-  themeColor: "#16161D",
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  viewportFit: "cover",
-};
+    let reloaded = false;
+    navigator.serviceWorker.register("/sw.js").then((reg) => {
+      reg.update();
+      // Yeni sürüm hazır olunca devral
+      reg.addEventListener("updatefound", () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener("statechange", () => {
+          if (sw.state === "installed" && navigator.serviceWorker.controller) {
+            sw.postMessage("skipWaiting");
+          }
+        });
+      });
+    }).catch(() => {});
 
-export default function RootLayout({ children }) {
-  return (
-    <html lang="tr">
-      <body>
-        {children}
-        <PwaRegister />
-      </body>
-    </html>
-  );
+    // Kontrolü yeni SW devraldığında sayfayı bir kez tazele
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
+  }, []);
+  return null;
 }
