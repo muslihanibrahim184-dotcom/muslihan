@@ -1,20 +1,23 @@
--- ============================================================
--- TÜM MAĞAZA VERİLERİNİ SİLER — sıfırdan gerçek veri girmek için.
--- Kullanıcılar ve roller (profiles) KORUNUR.
--- Kasa, satış, çek, müşteri, ürün, tedarikçi vb. TAMAMEN silinir.
---
--- DİKKAT: Geri alınamaz!
--- Mutlaka DOĞRU Muslihan projesinde çalıştırın
--- (ürün/müşteri/satış tablolarının olduğu proje).
--- ============================================================
-
-truncate table
-  public.sales,
-  public.collections,
-  public.cash_entries,
-  public.cheques,
-  public.supplier_movements,
-  public.suppliers,
-  public.customers,
-  public.products
-restart identity cascade;
+{
+  "name": "muslihan-magaza",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "lucide-react": "^0.383.0",
+    "next": "14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6"
+  }
+}

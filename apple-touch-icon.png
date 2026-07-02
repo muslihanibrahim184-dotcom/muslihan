@@ -72,6 +72,8 @@ export async function supplierPay(supplier, tutar, aciklama, tarih) {
 }
 
 // --- Satış ------------------------------------------------------------
+const HESABA = (odeme) => ["veresiye", "çek", "cek", "senet"].includes(String(odeme || "").toLowerCase());
+
 export async function recordSale({ urun, adet, musteri, odeme, birimFiyat, tarih }) {
   const t = tarih || todayISO();
   const birim = (birimFiyat && Number(birimFiyat) > 0) ? Number(birimFiyat) : Number(urun.satis);
@@ -82,17 +84,38 @@ export async function recordSale({ urun, adet, musteri, odeme, birimFiyat, tarih
   }).select().single();
   if (error) throw error;
   await sb.from("products").update({ stok: Number(urun.stok) - adet }).eq("id", urun.id).throwOnError();
-  if (odeme === "veresiye" && musteri) {
+  if (HESABA(odeme) && musteri) {
     await sb.from("customers").update({ bakiye: Number(musteri.bakiye) + tutar }).eq("id", musteri.id).throwOnError();
   } else {
-    await addCash(`Peşin satış: ${urun.ad}`, "giris", tutar, sale.id, t).throwOnError();
+    await addCash(`Satış: ${urun.ad}`, "giris", tutar, sale.id, t).throwOnError();
+  }
+  return sale;
+}
+// Müşteri iadesi: negatif satış olarak kaydedilir (ciro/kâr otomatik netleşir)
+export async function customerReturn({ musteri, urun, adet, tutar, tur, tarih, aciklama }) {
+  const t = tarih || todayISO();
+  const ad = Math.abs(Number(adet) || 0);
+  const tutarN = Math.abs(Number(tutar) || 0);
+  const maliyet = urun && ad ? Number(urun.giris) * ad : 0;
+  const { data: sale, error } = await sb.from("sales").insert({
+    tarih: t, urun_id: urun ? urun.id : null,
+    urun_ad: (urun ? `İade: ${urun.ad}` : "İade") + (aciklama ? ` · ${aciklama}` : ""),
+    adet: ad ? -ad : 0, birim_fiyat: 0, maliyet: -maliyet, tutar: -tutarN, kar: -(tutarN - maliyet),
+    musteri_id: musteri.id, musteri_ad: musteri.ad, odeme: "iade",
+  }).select().single();
+  if (error) throw error;
+  if (urun && ad) await sb.from("products").update({ stok: Number(urun.stok) + ad }).eq("id", urun.id).throwOnError();
+  if (tur === "nakit") {
+    await addCash(`İade: ${musteri.ad}`, "cikis", tutarN, sale.id, t).throwOnError();
+  } else {
+    await sb.from("customers").update({ bakiye: Number(musteri.bakiye) - tutarN }).eq("id", musteri.id).throwOnError();
   }
   return sale;
 }
 export async function deleteSale(sale, products, customers) {
   const urun = products.find((p) => p.id === sale.urun_id);
   if (urun) await sb.from("products").update({ stok: Number(urun.stok) + Number(sale.adet) }).eq("id", urun.id).throwOnError();
-  if (sale.odeme === "veresiye" && sale.musteri_id) {
+  if (HESABA(sale.odeme) && sale.musteri_id) {
     const m = customers.find((c) => c.id === sale.musteri_id);
     if (m) await sb.from("customers").update({ bakiye: Number(m.bakiye) - Number(sale.tutar) }).eq("id", m.id).throwOnError();
   } else {
