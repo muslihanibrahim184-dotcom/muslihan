@@ -8,10 +8,10 @@ import {
 import { supabase } from "@/lib/supabase";
 import * as db from "@/lib/db";
 
-const C = { paper:"#FAF8F3", surface:"#FFFFFF", ink:"#16161D", inkSoft:"#5C5B66", hair:"#E8E2D6",
-  gelir:"#18794E", gelirBg:"#E7F2EC", gider:"#B42318", giderBg:"#FBEAE8", gold:"#9C7A2E", goldBg:"#F4ECD9" };
-// Sekme/kart canlı renkleri (rengârenk arayüz)
-const RENK = { ozet:"#4F46E5", satis:"#059669", urun:"#D97706", musteri:"#0EA5E9", siparis:"#7C3AED", kumasci:"#E11D48", ted:"#0D9488", cek:"#DB2777", gider:"#EA580C", kullanicilar:"#475569" };
+const C = { paper:"#F4F4F5", surface:"#FFFFFF", ink:"#131417", inkSoft:"#71727A", hair:"#E6E7EA",
+  gelir:"#0F7B57", gelirBg:"#E6F4EE", gider:"#C0392B", giderBg:"#FBEBE9", gold:"#8A6D3B", goldBg:"#F3ECDA" };
+// Sekme/kart canlı renkleri (rengârenk ama rafine mücevher tonları)
+const RENK = { ozet:"#4338CA", satis:"#047857", urun:"#B45309", musteri:"#0369A1", siparis:"#6D28D9", kumasci:"#BE123C", ted:"#0F766E", cek:"#BE185D", gider:"#C2410C", kullanicilar:"#475569" };
 const N=(x)=>Number(x)||0;
 const tl=(n)=>new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",maximumFractionDigits:0}).format(N(n));
 const sayi=(n)=>new Intl.NumberFormat("tr-TR").format(N(n));
@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v30"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v31"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -183,8 +183,8 @@ export default function App({ session }) {
         <header className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg" style={{background:`linear-gradient(135deg, ${RENK.ozet}, ${RENK.cek} 45%, ${RENK.urun})`}}><ShoppingCart size={20} color="#fff"/></div>
-            <div><h1 className="text-xl sm:text-2xl font-semibold tracking-tight" style={{fontFamily:"Georgia, serif"}}>Muslihan Tekstil</h1>
-              <p className="text-xs sm:text-sm" style={{color:C.inkSoft}}>Mağaza takip sistemi · <span style={{color:C.gold}}>{SURUM}</span></p></div>
+            <div><h1 className="text-2xl sm:text-3xl leading-none" style={{fontFamily:"'Instrument Serif', Georgia, serif",letterSpacing:"0.01em"}}>Muslihan Tekstil</h1>
+              <p className="text-xs sm:text-sm mt-1" style={{color:C.inkSoft}}>Mağaza takip sistemi · <span style={{color:C.gold}}>{SURUM}</span></p></div>
           </div>
           <div className="flex items-center gap-2">
             {busy && <Loader2 size={16} className="animate-spin" color={C.inkSoft}/>}
@@ -1053,9 +1053,9 @@ function KurChip({icon,etiket,deger}){
 // === Ortak parçalar =========================================================
 function Merkez({children}){ return <div className="min-h-screen flex flex-col items-center justify-center text-center p-6" style={{background:C.paper,color:C.ink}}>{children}</div>; }
 function KPI({etiket,deger,alt,renk=C.ink,icon,bg,ac,onClick,dov:dovStr}){
-  return (<button onClick={onClick} className="text-left rounded-xl border p-4 transition-all hover:shadow-md" style={{background:C.surface,borderColor:C.hair,borderTop:`3px solid ${ac||(renk!==C.ink?renk:C.gold)}`}}>
+  return (<button onClick={onClick} className="text-left rounded-2xl border p-4 kart-golge kart-golge-hover hover:-translate-y-0.5" style={{background:C.surface,borderColor:C.hair,borderTop:`3px solid ${ac||(renk!==C.ink?renk:C.gold)}`}}>
     <div className="flex items-center justify-between mb-2"><span className="text-xs uppercase tracking-wider" style={{color:C.inkSoft}}>{etiket}</span><span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{background:bg}}>{icon}</span></div>
-    <div className="text-base sm:text-lg font-semibold tabular-nums" style={{color:renk,fontFamily:"Georgia, serif"}}>{deger}</div>
+    <div className="text-base sm:text-lg font-semibold tabular-nums" style={{color:renk,fontFamily:"'Instrument Serif', Georgia, serif"}}>{deger}</div>
     {dovStr&&<div className="text-xs tabular-nums mt-0.5" style={{color:C.inkSoft}}>{dovStr}</div>}
     <div className="text-xs mt-0.5" style={{color:C.inkSoft}}>{alt}</div></button>);
 }
@@ -1078,8 +1078,8 @@ function Rozet({children,renk,bg}){return <span className="text-xs px-1.5 py-0.5
 function SilBtn({onClick}){return <button onClick={onClick} className="md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1.5 rounded" title="Sil"><Trash2 size={15} color={C.gider}/></button>;}
 function Modal({title,children,onClose}){
   return (<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{background:"rgba(0,0,0,0.5)"}} onClick={onClose}>
-    <div className="relative w-full sm:max-w-xl max-h-[88vh] overflow-y-auto rounded-t-2xl sm:rounded-xl" style={{background:C.surface}} onClick={e=>e.stopPropagation()}>
+    <div className="relative w-full sm:max-w-xl max-h-[88vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl kart-golge" style={{background:C.surface}} onClick={e=>e.stopPropagation()}>
       <div className="flex items-center justify-between px-5 py-3 border-b sticky top-0" style={{borderColor:C.hair,background:C.surface}}>
-        <span className="text-base font-semibold" style={{fontFamily:"Georgia, serif"}}>{title}</span><button onClick={onClose}><X size={18} color={C.inkSoft}/></button></div>
+        <span className="text-base font-semibold" style={{fontFamily:"'Instrument Serif', Georgia, serif"}}>{title}</span><button onClick={onClose}><X size={18} color={C.inkSoft}/></button></div>
       <div className="p-5">{children}</div></div></div>);
 }
