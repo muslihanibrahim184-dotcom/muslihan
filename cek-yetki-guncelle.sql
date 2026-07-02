@@ -1,43 +1,25 @@
-// Service worker — uygulama kabuğunu önbelleğe alır, yeni sürümde kendini günceller.
-const CACHE = "muslihan-v30";
-const SHELL = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
+-- ============================================================
+-- Çek/Senet'i tedarik rolüne açar.
+-- Supabase > SQL Editor'da TAMAMINI seçip Run'a basın.
+-- Veri silinmez; sadece çek tablosunun yetki kuralları güncellenir.
+-- NOT: Mevcut user_role() fonksiyonuna DOKUNULMAZ (zaten çalışıyor).
+-- ============================================================
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
-});
+alter table public.cheques enable row level security;
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
+drop policy if exists sel on public.cheques;
+drop policy if exists ins on public.cheques;
+drop policy if exists upd on public.cheques;
+drop policy if exists del on public.cheques;
 
-self.addEventListener("message", (e) => {
-  if (e.data === "skipWaiting") self.skipWaiting();
-});
+create policy sel on public.cheques for select to authenticated
+  using (public.user_role() in ('admin','editor','tedarik'));
 
-self.addEventListener("fetch", (e) => {
-  const { request } = e;
-  if (request.method !== "GET") return;
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // Supabase/dış istekleri dokunma
+create policy ins on public.cheques for insert to authenticated
+  with check (public.user_role() in ('admin','editor','tedarik'));
 
-  // JS/CSS gibi statik dosyalar: önce ağ, başarısızsa önbellek (yeni sürüm hemen gelsin)
-  if (url.pathname.startsWith("/_next/")) {
-    e.respondWith(
-      fetch(request).then((res) => {
-        const copy = res.clone(); caches.open(CACHE).then((c) => c.put(request, copy)); return res;
-      }).catch(() => caches.match(request))
-    );
-    return;
-  }
+create policy upd on public.cheques for update to authenticated
+  using (public.user_role() in ('admin','editor','tedarik'));
 
-  // Sayfa gezinmeleri: önce ağ, başarısızsa önbellek
-  e.respondWith(
-    fetch(request).then((res) => {
-      const copy = res.clone(); caches.open(CACHE).then((c) => c.put(request, copy)); return res;
-    }).catch(() => caches.match(request).then((r) => r || caches.match("/")))
-  );
-});
+create policy del on public.cheques for delete to authenticated
+  using (public.user_role() = 'admin');
