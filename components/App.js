@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v36"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v37"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -467,8 +467,8 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
       <div className="col-span-2 md:col-span-4"><Lbl>Fotoğraf</Lbl>
         <div className="flex items-center gap-3">
           {ff.foto
-            ? <img src={ff.foto} alt="" className="h-16 w-16 rounded-lg object-cover" style={{border:`1px solid ${C.hair}`}}/>
-            : <div className="flex h-16 w-16 items-center justify-center rounded-lg" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={18} color={C.inkSoft}/></div>}
+            ? <img src={ff.foto} alt="" className="h-24 w-24 rounded-lg object-cover" style={{border:`1px solid ${C.hair}`}}/>
+            : <div className="flex h-24 w-24 items-center justify-center rounded-lg" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={22} color={C.inkSoft}/></div>}
           <div className="flex flex-wrap gap-2">
             <label className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,background:C.surface}}>
               {yukleniyor?"Yükleniyor…":ff.foto?"Değiştir":"Fotoğraf Seç"}
@@ -490,8 +490,8 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
           <button onClick={()=>setAc(!ac)} className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{background:C.ink}}><Plus size={16}/> Ürün Ekle</button>
         </div>
       </div>
-      {buyuk&&(<Modal title={buyuk.ad} onClose={()=>setBuyuk(null)}>
-        <img src={buyuk.foto} alt="" className="w-full rounded-xl object-contain" style={{maxHeight:"60vh",background:C.paper}}/>
+      {buyuk&&(<Modal genis title={buyuk.ad} onClose={()=>setBuyuk(null)}>
+        <img src={buyuk.foto} alt="" className="w-full rounded-xl object-contain" style={{maxHeight:"75vh",background:C.paper}}/>
         <div className="mt-3 text-sm" style={{color:C.inkSoft}}>{buyuk.kod}{buyuk.renk?` \u00b7 ${buyuk.renk}`:""} \u00b7 stok {sayi(buyuk.stok)} {buyuk.birim} \u00b7 <b style={{color:C.gelir}}>{tl(buyuk.satis)}</b></div>
       </Modal>)}
       {etiketAc&&(<Modal title="QR Etiket Yazdır" onClose={()=>setEtiketAc(false)}>
@@ -527,8 +527,8 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
           <Tr key={s.id}>
             <Td><div className="flex items-start gap-2.5">
               {s.foto
-                ? <img src={s.foto} alt="" onClick={()=>setBuyuk(s)} className="h-11 w-11 rounded-lg object-cover cursor-zoom-in shrink-0" style={{border:`1px solid ${C.hair}`}}/>
-                : <div className="flex h-11 w-11 items-center justify-center rounded-lg shrink-0" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={14} color={C.inkSoft}/></div>}
+                ? <img src={s.foto} alt="" onClick={()=>setBuyuk(s)} className="h-14 w-14 sm:h-20 sm:w-20 md:h-24 md:w-24 rounded-lg object-cover cursor-zoom-in shrink-0 transition-transform hover:scale-[1.03]" style={{border:`1px solid ${C.hair}`}} title="Büyütmek için tıkla"/>
+                : <div className="flex h-14 w-14 sm:h-20 sm:w-20 md:h-24 md:w-24 items-center justify-center rounded-lg shrink-0" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={20} color={C.inkSoft}/></div>}
               <div className="min-w-0"><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}{s.renk?` · ${s.renk}`:""}</div>{s.created_at&&<div className="text-xs" style={{color:C.inkSoft}}>eklendi {fTarih(s.created_at.slice(0,10))}{gun!=null&&` · ${gun<=0?"bugün":gun+" gün önce"}`}</div>}</div></div></Td>
             <Td><Rozet renk={C.gold} bg={C.goldBg}>{s.kategori}</Rozet></Td>
             <Td r><span className="tabular-nums font-semibold" style={{color:dusuk?C.gider:C.ink}}>{sayi(s.stok)} {s.birim}</span>{dusuk&&<div className="text-xs" style={{color:C.gider}}>kritik</div>}</Td>
@@ -1335,9 +1335,9 @@ function Th({children,r}){return <th className={`px-4 py-3 text-xs uppercase tra
 function Td({children,r,mono,bold,style={}}){return <td className={`px-4 py-3 align-top ${r?"text-right":"text-left"} ${mono?"tabular-nums":""} ${bold?"font-semibold":""}`} style={style}>{children}</td>;}
 function Rozet({children,renk,bg}){return <span className="text-xs px-1.5 py-0.5 rounded capitalize whitespace-nowrap" style={{background:bg,color:renk}}>{children}</span>;}
 function SilBtn({onClick}){return <button onClick={onClick} className="md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1.5 rounded" title="Sil"><Trash2 size={15} color={C.gider}/></button>;}
-function Modal({title,children,onClose}){
+function Modal({title,children,onClose,genis}){
   return (<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{background:"rgba(0,0,0,0.5)"}} onClick={onClose}>
-    <div className="relative w-full sm:max-w-xl max-h-[88vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl kart-golge" style={{background:C.surface}} onClick={e=>e.stopPropagation()}>
+    <div className={`relative w-full ${genis?"sm:max-w-4xl":"sm:max-w-xl"} max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl kart-golge`} style={{background:C.surface}} onClick={e=>e.stopPropagation()}>
       <div className="flex items-center justify-between px-5 py-3 border-b sticky top-0" style={{borderColor:C.hair,background:C.surface}}>
         <span className="text-base font-semibold" style={{fontFamily:"'Instrument Serif', Georgia, serif"}}>{title}</span><button onClick={onClose}><X size={18} color={C.inkSoft}/></button></div>
       <div className="p-5">{children}</div></div></div>);
