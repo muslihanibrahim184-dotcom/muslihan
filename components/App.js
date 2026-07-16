@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Trash2, Search, Boxes, ShoppingCart, Users, Truck, Scissors, LayoutDashboard,
   AlertTriangle, TrendingUp, X, Receipt, Coins, ArrowUpRight, ArrowDownRight, ScrollText,
-  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound, ArrowRightLeft, ClipboardList, Wallet, Printer,
+  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound, ArrowRightLeft, ClipboardList, Wallet, Printer, QrCode, Tag,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as db from "@/lib/db";
@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v33"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v34"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -108,6 +108,15 @@ export default function App({ session }) {
     const id=setInterval(tazele, 5000);
     return ()=>{ document.removeEventListener("visibilitychange", tazele); window.removeEventListener("focus", tazele); clearInterval(id); };
   },[refresh]);
+
+  // QR tarayıcı
+  const [tara,setTara]=useState(false);
+  // Telefonun kendi kamerasıyla okutulan QR (?u=<id>) doğrudan ürünü açsın
+  const [qrUrun,setQrUrun]=useState(null);
+  useEffect(()=>{ if(typeof window==="undefined") return;
+    const id=new URLSearchParams(window.location.search).get("u"); if(!id) return;
+    const u=(data.products||[]).find(p=>p.id===id); if(u){ setQrUrun(u); window.history.replaceState({},"",window.location.pathname); }
+  },[data.products]);
 
   // Aşağı çekerek yenileme (pull-to-refresh)
   const [ptr,setPtr]=useState(0); const [ptrYukle,setPtrYukle]=useState(false);
@@ -188,6 +197,7 @@ export default function App({ session }) {
           </div>
           <div className="flex items-center gap-2">
             {busy && <Loader2 size={16} className="animate-spin" color={C.inkSoft}/>}
+            <button onClick={()=>setTara(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white" style={{background:RENK.satis}}><QrCode size={15}/> <span className="hidden sm:inline">QR Okut</span></button>
             <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full" style={{background:C.gelirBg,color:C.gelir}}><ShieldCheck size={12}/> {ROL_AD[rol]}</span>
             <span className="hidden sm:block text-sm max-w-[150px] truncate" style={{color:C.inkSoft}}>{session?.user?.email}</span>
             <button onClick={()=>supabase.auth.signOut()} className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium" style={{borderColor:C.hair,background:C.surface}}><LogOut size={15}/> Çıkış</button>
@@ -215,6 +225,8 @@ export default function App({ session }) {
         {aktif==="gider" && <Gider {...{giderler,toplamGider,kur,A,canDelete}}/>}
         {aktif==="kullanicilar" && <Kullanicilar me={session?.user?.id}/>}
       </div>
+      {tara && <QrTara products={products} customers={customers} kur={kur} A={A} onClose={()=>setTara(false)}/>}
+      {qrUrun && <Modal title="Ürün" onClose={()=>setQrUrun(null)}><UrunKarti urun={products.find(p=>p.id===qrUrun.id)||qrUrun} customers={customers} kur={kur} A={A} onClose={()=>setQrUrun(null)}/></Modal>}
     </div>
   );
 }
@@ -418,7 +430,12 @@ function Satis({products,customers,sales,kur,A,canDelete}){
 // === ÜRÜNLER ================================================================
 function Urunler({products,stokDeger,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
-  const bos={ad:"",kod:"",kategori:"",stok:"",birim:"adet",giris:"",satis:"",min:"",pb:"TL"};
+  const [etiketAc,setEtiketAc]=useState(false);
+  const [sec,setSec]=useState({}); // id -> adet
+  const [yaz,setYaz]=useState(false);
+  const etiketYaz=async()=>{ const liste=Object.entries(sec).map(([id,n])=>({urun:products.find(p=>p.id===id),adet:Math.max(1,parse(n)||1)})).filter(x=>x.urun);
+    if(!liste.length) return; setYaz(true); try{ await etiketYazdir(liste); } catch(e){ alert("Etiket oluşturulamadı: "+(e.message||e)); } finally{ setYaz(false); } };
+  const bos={ad:"",kod:"",kategori:"",renk:"",stok:"",birim:"adet",giris:"",satis:"",min:"",pb:"TL"};
   const [f,setF]=useState(bos); const [arama,setArama]=useState("");
   const [duz,setDuz]=useState(null); // düzenlenen ürün
   const [df,setDf]=useState(bos);
@@ -430,14 +447,15 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
     const conv=(v)=> v>0 ? fmtInput(toTr((v*carpan(eski))/carpan(yeniPb))) : "";
     setFf({...ff,pb:yeniPb,giris:g>0?conv(g):ff.giris,satis:s>0?conv(s):ff.satis}); };
   const ekle=async()=>{ if(!f.ad.trim())return; const c=carpan(f.pb||"TL");
-    await A.addProduct({ad:f.ad.trim(),kod:f.kod||"—",kategori:f.kategori||"Genel",stok:parse(f.stok),birim:f.birim,giris:parse(f.giris)*c,satis:parse(f.satis)*c,min_stok:parse(f.min)}); setF(bos); setAc(false); };
-  const duzenleAc=(s)=>{ setDf({ad:s.ad,kod:s.kod==="—"?"":s.kod,kategori:s.kategori==="Genel"?"":s.kategori,stok:String(s.stok),birim:s.birim||"adet",giris:String(s.giris),satis:String(s.satis),min:String(s.min_stok),pb:"TL"}); setDuz(s); };
+    await A.addProduct({ad:f.ad.trim(),kod:f.kod||"—",kategori:f.kategori||"Genel",renk:f.renk.trim(),stok:parse(f.stok),birim:f.birim,giris:parse(f.giris)*c,satis:parse(f.satis)*c,min_stok:parse(f.min)}); setF(bos); setAc(false); };
+  const duzenleAc=(s)=>{ setDf({ad:s.ad,kod:s.kod==="—"?"":s.kod,kategori:s.kategori==="Genel"?"":s.kategori,renk:s.renk||"",stok:String(s.stok),birim:s.birim||"adet",giris:String(s.giris),satis:String(s.satis),min:String(s.min_stok),pb:"TL"}); setDuz(s); };
   const duzenleKaydet=async()=>{ if(!df.ad.trim())return; const c=carpan(df.pb||"TL");
-    await A.updateProduct(duz.id,{ad:df.ad.trim(),kod:df.kod||"—",kategori:df.kategori||"Genel",stok:parse(df.stok),birim:df.birim,giris:parse(df.giris)*c,satis:parse(df.satis)*c,min_stok:parse(df.min)}); setDuz(null); };
-  const goster=products.filter(u=>(u.ad+u.kod+u.kategori).toLowerCase().includes(arama.toLowerCase()));
+    await A.updateProduct(duz.id,{ad:df.ad.trim(),kod:df.kod||"—",kategori:df.kategori||"Genel",renk:df.renk.trim(),stok:parse(df.stok),birim:df.birim,giris:parse(df.giris)*c,satis:parse(df.satis)*c,min_stok:parse(df.min)}); setDuz(null); };
+  const goster=products.filter(u=>(u.ad+u.kod+u.kategori+(u.renk||"")).toLowerCase().includes(arama.toLowerCase()));
   const FormGrid=(ff,setFf)=>{ const p=ff.pb||"TL"; return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <Inp label="Ürün adı" v={ff.ad} set={v=>setFf({...ff,ad:v})} cls="col-span-2"/><Inp label="Kod" v={ff.kod} set={v=>setFf({...ff,kod:v})}/><Inp label="Kategori" v={ff.kategori} set={v=>setFf({...ff,kategori:v})}/>
+      <Inp label="Renk" v={ff.renk} set={v=>setFf({...ff,renk:v})} cls="col-span-2"/>
       <Inp label="Stok" v={ff.stok} set={v=>setFf({...ff,stok:v})} num/>
       <div><Lbl>Birim</Lbl><select value={ff.birim} onChange={e=>setFf({...ff,birim:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>{["adet","top","mt","kg","paket"].map(b=><option key={b}>{b}</option>)}</select></div>
       <div><Lbl>Fiyat Birimi</Lbl><select value={p} onChange={e=>pbDegis(ff,setFf,e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${p!=="TL"?C.gold:C.hair}`,background:C.paper,color:p!=="TL"?C.gold:C.ink}}><option value="TL">₺ TL</option><option value="USD">$ Dolar</option><option value="EUR">€ Euro</option></select></div>
@@ -450,8 +468,31 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Ozetcik etiket="Toplam Stok Değeri (giriş)" deger={tl(stokDeger)} dov={dov(stokDeger,kur)}/>
-        <button onClick={()=>setAc(!ac)} className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{background:C.ink}}><Plus size={16}/> Ürün Ekle</button>
+        <div className="flex gap-2">
+          <button onClick={()=>setEtiketAc(true)} className="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold" style={{borderColor:C.hair,background:C.surface,color:C.ink}}><Tag size={16}/> Etiket Yazdır</button>
+          <button onClick={()=>setAc(!ac)} className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{background:C.ink}}><Plus size={16}/> Ürün Ekle</button>
+        </div>
       </div>
+      {etiketAc&&(<Modal title="QR Etiket Yazdır" onClose={()=>setEtiketAc(false)}>
+        <p className="text-sm mb-3" style={{color:C.inkSoft}}>Etiketini basmak istediğin ürünleri seç, kaç adet basılacağını yaz. Her etikette QR kod, ürün adı, kod/renk ve fiyat olur.</p>
+        <div className="flex gap-2 mb-3">
+          <button onClick={()=>setSec(Object.fromEntries(products.map(p=>[p.id,"1"])))} className="rounded-lg px-3 py-1.5 text-xs font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Tümünü seç</button>
+          <button onClick={()=>setSec({})} className="rounded-lg px-3 py-1.5 text-xs font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Temizle</button>
+        </div>
+        <div className="max-h-64 overflow-y-auto rounded-lg border" style={{borderColor:C.hair}}>
+          {products.map(p=>{const secili=sec[p.id]!=null; return(
+            <div key={p.id} className="flex items-center gap-3 px-3 py-2 border-b last:border-b-0" style={{borderColor:C.hair}}>
+              <input type="checkbox" checked={secili} onChange={e=>{const n={...sec}; if(e.target.checked) n[p.id]="1"; else delete n[p.id]; setSec(n);}}/>
+              <div className="min-w-0 flex-1"><div className="text-sm font-medium truncate">{p.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{p.kod}{p.renk?` · ${p.renk}`:""} · {tl(p.satis)}</div></div>
+              {secili&&<input value={sec[p.id]} onChange={e=>setSec({...sec,[p.id]:fmtInput(e.target.value)})} inputMode="numeric" className="w-16 rounded-lg px-2 py-1 text-sm text-right tabular-nums outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>}
+            </div>);})}
+          {products.length===0&&<div className="px-3 py-4 text-sm" style={{color:C.inkSoft}}>Ürün yok.</div>}
+        </div>
+        <div className="flex justify-end gap-2 mt-3">
+          <button onClick={()=>setEtiketAc(false)} className="rounded-lg px-4 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Vazgeç</button>
+          <button onClick={etiketYaz} disabled={yaz} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:yaz?C.inkSoft:C.gelir}}>{yaz?<Loader2 size={15} className="animate-spin"/>:<Printer size={15}/>} {yaz?"Hazırlanıyor…":"Yazdır"}</button>
+        </div>
+      </Modal>)}
       {ac&&(<div className="rounded-xl border p-4" style={{background:C.surface,borderColor:C.hair}}>
         {FormGrid(f,setF)}
         <div className="flex justify-end mt-3"><button onClick={ekle} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Kaydet</button></div>
@@ -463,7 +504,7 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
           const gun=s.created_at?Math.floor((Date.now()-new Date(s.created_at).getTime())/86400000):null;
           const gToplam=N(s.stok)*N(s.giris), sToplam=N(s.stok)*N(s.satis), kToplam=N(s.stok)*kar; return(
           <Tr key={s.id}>
-            <Td><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}</div>{s.created_at&&<div className="text-xs" style={{color:C.inkSoft}}>eklendi {fTarih(s.created_at.slice(0,10))}{gun!=null&&` · ${gun<=0?"bugün":gun+" gün önce"}`}</div>}</Td>
+            <Td><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}{s.renk?` · ${s.renk}`:""}</div>{s.created_at&&<div className="text-xs" style={{color:C.inkSoft}}>eklendi {fTarih(s.created_at.slice(0,10))}{gun!=null&&` · ${gun<=0?"bugün":gun+" gün önce"}`}</div>}</Td>
             <Td><Rozet renk={C.gold} bg={C.goldBg}>{s.kategori}</Rozet></Td>
             <Td r><span className="tabular-nums font-semibold" style={{color:dusuk?C.gider:C.ink}}>{sayi(s.stok)} {s.birim}</span>{dusuk&&<div className="text-xs" style={{color:C.gider}}>kritik</div>}</Td>
             <Td r mono>{tl(s.giris)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.giris),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(gToplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(gToplam,kur)}</div></Td>
@@ -982,6 +1023,138 @@ function Gider({giderler=[],toplamGider,kur,A,canDelete}){
         {giderler.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Gider kaydı yok.</span></Td></Tr>}
       </tbody></Tablo>
     </div>
+  );
+}
+
+// === QR ETİKET + KAMERA TARAYICI ===========================================
+const qrMetni=(u)=>`${typeof window!=="undefined"?window.location.origin:""}/?u=${u.id}`;
+const uuidBul=(t)=>{ const m=String(t||"").match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i); return m?m[0]:null; };
+
+async function etiketYazdir(liste){ // liste: [{urun, adet}]
+  const QR=(await import("qrcode")).default;
+  const kartlar=[];
+  for(const {urun,adet} of liste){
+    const png=await QR.toDataURL(qrMetni(urun),{margin:0,width:220,errorCorrectionLevel:"M"});
+    for(let i=0;i<adet;i++) kartlar.push(`<div class="et">
+      <img src="${png}" alt="">
+      <div class="bilgi">
+        <div class="ad">${esc(urun.ad)}</div>
+        <div class="satir">${esc(urun.kod||"")}${urun.renk?` · ${esc(urun.renk)}`:""}</div>
+        <div class="fiyat">${esc(tl(urun.satis))}</div>
+      </div></div>`);
+  }
+  const html=`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Ürün Etiketleri</title><style>
+    @page{margin:8mm}
+    *{box-sizing:border-box}
+    body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;padding:0;background:#fff;color:#111}
+    .sayfa{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm}
+    .et{border:1px dashed #bbb;border-radius:6px;padding:4mm;display:flex;gap:3mm;align-items:center;break-inside:avoid}
+    .et img{width:22mm;height:22mm;display:block}
+    .bilgi{min-width:0}
+    .ad{font-weight:700;font-size:10pt;line-height:1.2;word-break:break-word}
+    .satir{font-size:8pt;color:#555;margin-top:1mm}
+    .fiyat{font-size:12pt;font-weight:700;margin-top:1.5mm}
+    @media print{.et{border-color:#ddd}}
+  </style></head><body><div class="sayfa">${kartlar.join("")}</div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>`;
+  yazdirPenceresi(html);
+}
+
+function UrunKarti({urun,customers,kur,A,onClose}){
+  const [sf,setSf]=useState({adet:"1",musteriId:"",odeme:"Nakit"});
+  const [mesaj,setMesaj]=useState("");
+  const sat=async()=>{ const adet=parse(sf.adet); if(adet<=0){setMesaj("Adet girin");return;}
+    const r=await A.sale({urunId:urun.id,adet,musteriId:sf.musteriId||null,odeme:sf.odeme,birimFiyat:N(urun.satis),tarih:TODAY});
+    if(r){setMesaj(r);return;} setMesaj("\u2713 Satis kaydedildi"); setTimeout(onClose,900); };
+  return (<div>
+    <div className="rounded-xl border p-4 mb-3" style={{borderColor:C.hair,background:C.paper}}>
+      <div className="text-lg font-semibold" style={{fontFamily:"'Instrument Serif', Georgia, serif"}}>{urun.ad}</div>
+      <div className="text-xs mb-3" style={{color:C.inkSoft}}>{urun.kod}{urun.kategori?` \u00b7 ${urun.kategori}`:""}</div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-lg p-2.5" style={{background:C.surface,border:`1px solid ${C.hair}`}}>
+          <div className="text-xs" style={{color:C.inkSoft}}>Stok</div>
+          <div className="text-base font-semibold tabular-nums" style={{color:kritikMi(urun)?C.gider:C.ink}}>{sayi(urun.stok)} {urun.birim}</div>
+        </div>
+        <div className="rounded-lg p-2.5" style={{background:C.surface,border:`1px solid ${C.hair}`}}>
+          <div className="text-xs" style={{color:C.inkSoft}}>Fiyat</div>
+          <div className="text-base font-semibold tabular-nums" style={{color:C.gelir}}>{tl(urun.satis)}</div>
+          <div className="text-xs tabular-nums" style={{color:C.inkSoft}}>{dov(N(urun.satis),kur)}</div>
+        </div>
+        <div className="rounded-lg p-2.5" style={{background:C.surface,border:`1px solid ${C.hair}`}}>
+          <div className="text-xs" style={{color:C.inkSoft}}>Renk</div>
+          <div className="text-base font-semibold">{urun.renk||"\u2014"}</div>
+        </div>
+      </div>
+    </div>
+    <h4 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{color:C.inkSoft}}>Hizli Satis</h4>
+    <div className="grid grid-cols-2 gap-2.5">
+      <div><Lbl>Adet</Lbl><input value={sf.adet} onChange={e=>setSf({...sf,adet:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+      <div><Lbl>Musteri (ops.)</Lbl><select value={sf.musteriId} onChange={e=>setSf({...sf,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Pesin musteri</option>{customers.map(c=><option key={c.id} value={c.id}>{c.ad}</option>)}</select></div>
+      <div className="col-span-2"><Lbl>Odeme Sekli</Lbl><div className="flex gap-1.5 flex-wrap">{["Nakit","Kredi Kartı","Çek","Senet","Veresiye"].map(o=>{const a=sf.odeme===o;return(
+        <button key={o} onClick={()=>setSf({...sf,odeme:o})} className="rounded-lg px-3 py-2 text-sm font-medium" style={{background:a?C.ink:"transparent",color:a?"#fff":C.inkSoft,border:`1px solid ${a?C.ink:C.hair}`}}>{o}</button>);})}</div></div>
+    </div>
+    <div className="text-sm tabular-nums mt-2" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(parse(sf.adet)*N(urun.satis))}</b></div>
+    {mesaj&&<p className="text-sm mt-2" style={{color:mesaj.startsWith("\u2713")?C.gelir:C.gider}}>{mesaj}</p>}
+    <div className="flex justify-end gap-2 mt-3">
+      <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Kapat</button>
+      <button onClick={sat} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Satisi Kaydet</button>
+    </div>
+  </div>);
+}
+
+function QrTara({products,customers,kur,A,onClose}){
+  const videoRef=useRef(null); const canvasRef=useRef(null);
+  const [durum,setDurum]=useState("Kamera açılıyor…");
+  const [bulunan,setBulunan]=useState(null);
+  const durRef=useRef(false);
+  useEffect(()=>{
+    let akis=null, rafId=null;
+    (async()=>{
+      try{
+        akis=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});
+        const v=videoRef.current; if(!v) return;
+        v.srcObject=akis; v.setAttribute("playsinline","true"); await v.play();
+        setDurum("QR kodu çerçeveye getirin");
+        const jsQR=(await import("jsqr")).default;
+        const cv=canvasRef.current, ctx=cv.getContext("2d",{willReadFrequently:true});
+        const tara=()=>{
+          if(durRef.current) return;
+          if(v.readyState===v.HAVE_ENOUGH_DATA){
+            cv.width=v.videoWidth; cv.height=v.videoHeight;
+            ctx.drawImage(v,0,0,cv.width,cv.height);
+            const img=ctx.getImageData(0,0,cv.width,cv.height);
+            const kod=jsQR(img.data,img.width,img.height,{inversionAttempts:"dontInvert"});
+            if(kod&&kod.data){
+              const id=uuidBul(kod.data);
+              const u=id?products.find(p=>p.id===id):null;
+              if(u){ durRef.current=true; setBulunan(u);
+                if(akis) akis.getTracks().forEach(t=>t.stop());
+                if(navigator.vibrate) navigator.vibrate(60);
+                return; }
+              setDurum("Bu QR bir ürüne ait değil");
+            }
+          }
+          rafId=requestAnimationFrame(tara);
+        };
+        rafId=requestAnimationFrame(tara);
+      }catch(e){ setDurum("Kamera açılamadı: "+(e.message||"izin verilmedi")); }
+    })();
+    return ()=>{ durRef.current=true; if(rafId) cancelAnimationFrame(rafId); if(akis) akis.getTracks().forEach(t=>t.stop()); };
+  },[products]);
+  return (
+    <Modal title={bulunan?"Ürün Bulundu":"QR Okut"} onClose={onClose}>
+      {!bulunan&&(<div>
+        <div className="relative rounded-xl overflow-hidden" style={{background:"#000",aspectRatio:"4/3"}}>
+          <video ref={videoRef} className="w-full h-full object-cover" muted playsInline/>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div style={{width:"60%",aspectRatio:"1",border:`3px solid ${RENK.satis}`,borderRadius:16,boxShadow:"0 0 0 9999px rgba(0,0,0,.35)"}}/>
+          </div>
+        </div>
+        <canvas ref={canvasRef} className="hidden"/>
+        <p className="text-sm text-center mt-3" style={{color:C.inkSoft}}>{durum}</p>
+      </div>)}
+      {bulunan&&<UrunKarti urun={bulunan} customers={customers} kur={kur} A={A} onClose={onClose}/>}
+    </Modal>
   );
 }
 
