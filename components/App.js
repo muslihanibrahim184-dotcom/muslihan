@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Trash2, Search, Boxes, ShoppingCart, Users, Truck, Scissors, LayoutDashboard,
   AlertTriangle, TrendingUp, X, Receipt, Coins, ArrowUpRight, ArrowDownRight, ScrollText,
-  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound, ArrowRightLeft, ClipboardList, Wallet, Printer, QrCode, Tag,
+  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound, ArrowRightLeft, ClipboardList, Wallet, Printer, QrCode, Tag, Image as ImageIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as db from "@/lib/db";
@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v34"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v36"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -115,8 +115,8 @@ export default function App({ session }) {
   const [qrUrun,setQrUrun]=useState(null);
   useEffect(()=>{ if(typeof window==="undefined") return;
     const id=new URLSearchParams(window.location.search).get("u"); if(!id) return;
-    const u=(data.products||[]).find(p=>p.id===id); if(u){ setQrUrun(u); window.history.replaceState({},"",window.location.pathname); }
-  },[data.products]);
+    const u=(data?.products||[]).find(p=>p.id===id); if(u){ setQrUrun(u); window.history.replaceState({},"",window.location.pathname); }
+  },[data?.products]);
 
   // Aşağı çekerek yenileme (pull-to-refresh)
   const [ptr,setPtr]=useState(0); const [ptrYukle,setPtrYukle]=useState(false);
@@ -431,11 +431,13 @@ function Satis({products,customers,sales,kur,A,canDelete}){
 function Urunler({products,stokDeger,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
   const [etiketAc,setEtiketAc]=useState(false);
+  const [yukleniyor,setYukleniyor]=useState(false);
+  const [buyuk,setBuyuk]=useState(null); // büyütülen fotoğraf
   const [sec,setSec]=useState({}); // id -> adet
   const [yaz,setYaz]=useState(false);
   const etiketYaz=async()=>{ const liste=Object.entries(sec).map(([id,n])=>({urun:products.find(p=>p.id===id),adet:Math.max(1,parse(n)||1)})).filter(x=>x.urun);
     if(!liste.length) return; setYaz(true); try{ await etiketYazdir(liste); } catch(e){ alert("Etiket oluşturulamadı: "+(e.message||e)); } finally{ setYaz(false); } };
-  const bos={ad:"",kod:"",kategori:"",renk:"",stok:"",birim:"adet",giris:"",satis:"",min:"",pb:"TL"};
+  const bos={ad:"",kod:"",kategori:"",renk:"",foto:"",stok:"",birim:"adet",giris:"",satis:"",min:"",pb:"TL"};
   const [f,setF]=useState(bos); const [arama,setArama]=useState("");
   const [duz,setDuz]=useState(null); // düzenlenen ürün
   const [df,setDf]=useState(bos);
@@ -447,10 +449,10 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
     const conv=(v)=> v>0 ? fmtInput(toTr((v*carpan(eski))/carpan(yeniPb))) : "";
     setFf({...ff,pb:yeniPb,giris:g>0?conv(g):ff.giris,satis:s>0?conv(s):ff.satis}); };
   const ekle=async()=>{ if(!f.ad.trim())return; const c=carpan(f.pb||"TL");
-    await A.addProduct({ad:f.ad.trim(),kod:f.kod||"—",kategori:f.kategori||"Genel",renk:f.renk.trim(),stok:parse(f.stok),birim:f.birim,giris:parse(f.giris)*c,satis:parse(f.satis)*c,min_stok:parse(f.min)}); setF(bos); setAc(false); };
-  const duzenleAc=(s)=>{ setDf({ad:s.ad,kod:s.kod==="—"?"":s.kod,kategori:s.kategori==="Genel"?"":s.kategori,renk:s.renk||"",stok:String(s.stok),birim:s.birim||"adet",giris:String(s.giris),satis:String(s.satis),min:String(s.min_stok),pb:"TL"}); setDuz(s); };
+    await A.addProduct({ad:f.ad.trim(),kod:f.kod||"—",kategori:f.kategori||"Genel",renk:f.renk.trim(),foto:f.foto||"",stok:parse(f.stok),birim:f.birim,giris:parse(f.giris)*c,satis:parse(f.satis)*c,min_stok:parse(f.min)}); setF(bos); setAc(false); };
+  const duzenleAc=(s)=>{ setDf({ad:s.ad,kod:s.kod==="—"?"":s.kod,kategori:s.kategori==="Genel"?"":s.kategori,renk:s.renk||"",foto:s.foto||"",stok:String(s.stok),birim:s.birim||"adet",giris:String(s.giris),satis:String(s.satis),min:String(s.min_stok),pb:"TL"}); setDuz(s); };
   const duzenleKaydet=async()=>{ if(!df.ad.trim())return; const c=carpan(df.pb||"TL");
-    await A.updateProduct(duz.id,{ad:df.ad.trim(),kod:df.kod||"—",kategori:df.kategori||"Genel",renk:df.renk.trim(),stok:parse(df.stok),birim:df.birim,giris:parse(df.giris)*c,satis:parse(df.satis)*c,min_stok:parse(df.min)}); setDuz(null); };
+    await A.updateProduct(duz.id,{ad:df.ad.trim(),kod:df.kod||"—",kategori:df.kategori||"Genel",renk:df.renk.trim(),foto:df.foto||"",stok:parse(df.stok),birim:df.birim,giris:parse(df.giris)*c,satis:parse(df.satis)*c,min_stok:parse(df.min)}); setDuz(null); };
   const goster=products.filter(u=>(u.ad+u.kod+u.kategori+(u.renk||"")).toLowerCase().includes(arama.toLowerCase()));
   const FormGrid=(ff,setFf)=>{ const p=ff.pb||"TL"; return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -462,6 +464,21 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
       <div><Lbl>Giriş {sym[p]} (maliyet)</Lbl><input value={ff.giris} onChange={e=>setFf({...ff,giris:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.giris)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.giris)*carpan(p))}</div>}</div>
       <div><Lbl>Satış {sym[p]}</Lbl><input value={ff.satis} onChange={e=>setFf({...ff,satis:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>{p!=="TL"&&parse(ff.satis)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(ff.satis)*carpan(p))}</div>}</div>
       <Inp label="Min. stok" v={ff.min} set={v=>setFf({...ff,min:v})} num/>
+      <div className="col-span-2 md:col-span-4"><Lbl>Fotoğraf</Lbl>
+        <div className="flex items-center gap-3">
+          {ff.foto
+            ? <img src={ff.foto} alt="" className="h-16 w-16 rounded-lg object-cover" style={{border:`1px solid ${C.hair}`}}/>
+            : <div className="flex h-16 w-16 items-center justify-center rounded-lg" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={18} color={C.inkSoft}/></div>}
+          <div className="flex flex-wrap gap-2">
+            <label className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,background:C.surface}}>
+              {yukleniyor?"Yükleniyor…":ff.foto?"Değiştir":"Fotoğraf Seç"}
+              <input type="file" accept="image/*" className="hidden" disabled={yukleniyor} onChange={async e=>{const dosya=e.target.files?.[0]; e.target.value=""; if(!dosya) return;
+                setYukleniyor(true); try{ const url=await db.uploadProductPhoto(dosya); setFf({...ff,foto:url}); }catch(err){ alert(err.message||"Fotoğraf yüklenemedi"); } finally{ setYukleniyor(false); } }}/>
+            </label>
+            {ff.foto&&<button onClick={()=>setFf({...ff,foto:""})} className="rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.gider}}>Kaldır</button>}
+          </div>
+        </div>
+      </div>
     </div>
   );};
   return (
@@ -473,6 +490,10 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
           <button onClick={()=>setAc(!ac)} className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{background:C.ink}}><Plus size={16}/> Ürün Ekle</button>
         </div>
       </div>
+      {buyuk&&(<Modal title={buyuk.ad} onClose={()=>setBuyuk(null)}>
+        <img src={buyuk.foto} alt="" className="w-full rounded-xl object-contain" style={{maxHeight:"60vh",background:C.paper}}/>
+        <div className="mt-3 text-sm" style={{color:C.inkSoft}}>{buyuk.kod}{buyuk.renk?` \u00b7 ${buyuk.renk}`:""} \u00b7 stok {sayi(buyuk.stok)} {buyuk.birim} \u00b7 <b style={{color:C.gelir}}>{tl(buyuk.satis)}</b></div>
+      </Modal>)}
       {etiketAc&&(<Modal title="QR Etiket Yazdır" onClose={()=>setEtiketAc(false)}>
         <p className="text-sm mb-3" style={{color:C.inkSoft}}>Etiketini basmak istediğin ürünleri seç, kaç adet basılacağını yaz. Her etikette QR kod, ürün adı, kod/renk ve fiyat olur.</p>
         <div className="flex gap-2 mb-3">
@@ -504,7 +525,11 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
           const gun=s.created_at?Math.floor((Date.now()-new Date(s.created_at).getTime())/86400000):null;
           const gToplam=N(s.stok)*N(s.giris), sToplam=N(s.stok)*N(s.satis), kToplam=N(s.stok)*kar; return(
           <Tr key={s.id}>
-            <Td><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}{s.renk?` · ${s.renk}`:""}</div>{s.created_at&&<div className="text-xs" style={{color:C.inkSoft}}>eklendi {fTarih(s.created_at.slice(0,10))}{gun!=null&&` · ${gun<=0?"bugün":gun+" gün önce"}`}</div>}</Td>
+            <Td><div className="flex items-start gap-2.5">
+              {s.foto
+                ? <img src={s.foto} alt="" onClick={()=>setBuyuk(s)} className="h-11 w-11 rounded-lg object-cover cursor-zoom-in shrink-0" style={{border:`1px solid ${C.hair}`}}/>
+                : <div className="flex h-11 w-11 items-center justify-center rounded-lg shrink-0" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={14} color={C.inkSoft}/></div>}
+              <div className="min-w-0"><div className="font-medium">{s.ad}</div><div className="text-xs" style={{color:C.inkSoft}}>{s.kod}{s.renk?` · ${s.renk}`:""}</div>{s.created_at&&<div className="text-xs" style={{color:C.inkSoft}}>eklendi {fTarih(s.created_at.slice(0,10))}{gun!=null&&` · ${gun<=0?"bugün":gun+" gün önce"}`}</div>}</div></div></Td>
             <Td><Rozet renk={C.gold} bg={C.goldBg}>{s.kategori}</Rozet></Td>
             <Td r><span className="tabular-nums font-semibold" style={{color:dusuk?C.gider:C.ink}}>{sayi(s.stok)} {s.birim}</span>{dusuk&&<div className="text-xs" style={{color:C.gider}}>kritik</div>}</Td>
             <Td r mono>{tl(s.giris)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(N(s.giris),kur)}</div><div className="text-xs font-semibold" style={{color:C.gold}}>toplam {tl(gToplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(gToplam,kur)}</div></Td>
@@ -1068,6 +1093,7 @@ function UrunKarti({urun,customers,kur,A,onClose}){
     if(r){setMesaj(r);return;} setMesaj("\u2713 Satis kaydedildi"); setTimeout(onClose,900); };
   return (<div>
     <div className="rounded-xl border p-4 mb-3" style={{borderColor:C.hair,background:C.paper}}>
+      {urun.foto&&<img src={urun.foto} alt="" className="w-full rounded-lg object-contain mb-3" style={{maxHeight:"38vh",background:C.surface,border:`1px solid ${C.hair}`}}/>}
       <div className="text-lg font-semibold" style={{fontFamily:"'Instrument Serif', Georgia, serif"}}>{urun.ad}</div>
       <div className="text-xs mb-3" style={{color:C.inkSoft}}>{urun.kod}{urun.kategori?` \u00b7 ${urun.kategori}`:""}</div>
       <div className="grid grid-cols-3 gap-2">
