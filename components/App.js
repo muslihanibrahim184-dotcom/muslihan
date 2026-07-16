@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v37"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v39"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -433,6 +433,11 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
   const [etiketAc,setEtiketAc]=useState(false);
   const [yukleniyor,setYukleniyor]=useState(false);
   const [buyuk,setBuyuk]=useState(null); // büyütülen fotoğraf
+  const [qr,setQr]=useState(null); // {urun, png}
+  const [qrAdet,setQrAdet]=useState("12");
+  const qrAc=async(u)=>{ try{ const QR=(await import("qrcode")).default;
+      const png=await QR.toDataURL(qrMetni(u),{margin:1,width:520,errorCorrectionLevel:"M"});
+      setQr({urun:u,png}); }catch(e){ alert("QR oluşturulamadı: "+(e.message||e)); } };
   const [sec,setSec]=useState({}); // id -> adet
   const [yaz,setYaz]=useState(false);
   const etiketYaz=async()=>{ const liste=Object.entries(sec).map(([id,n])=>({urun:products.find(p=>p.id===id),adet:Math.max(1,parse(n)||1)})).filter(x=>x.urun);
@@ -490,6 +495,23 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
           <button onClick={()=>setAc(!ac)} className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{background:C.ink}}><Plus size={16}/> Ürün Ekle</button>
         </div>
       </div>
+      {qr&&(<Modal title="Ürün QR Kodu" onClose={()=>setQr(null)}>
+        <div className="flex flex-col items-center">
+          <img src={qr.png} alt="" className="w-52 h-52 rounded-xl" style={{border:`1px solid ${C.hair}`,background:"#fff"}}/>
+          <div className="text-center mt-3">
+            <div className="text-lg font-semibold" style={{fontFamily:"'Instrument Serif', Georgia, serif"}}>{qr.urun.ad}</div>
+            <div className="text-xs" style={{color:C.inkSoft}}>{qr.urun.kod}{qr.urun.renk?` · ${qr.urun.renk}`:""} · {tl(qr.urun.satis)}</div>
+          </div>
+        </div>
+        <div className="rounded-lg p-3 mt-4 text-xs" style={{background:C.gelirBg,color:C.gelir}}>
+          Bu QR bu ürüne <b>kalıcı olarak</b> bağlıdır. Fiyat, renk, stok veya fotoğraf değişse de aynı kalır; okutunca hep güncel bilgi gelir. Aynı üründen kaç etiket basarsan bas, hepsi bu kodu taşır.
+        </div>
+        <div className="flex items-end gap-2 mt-4">
+          <div className="w-24"><Lbl>Kaç etiket?</Lbl><input value={qrAdet} onChange={e=>setQrAdet(fmtInput(e.target.value))} inputMode="numeric" className="w-full rounded-lg px-3 py-2 text-sm text-right tabular-nums outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <button onClick={async()=>{ setYukleniyor(true); try{ await etiketYazdir([{urun:qr.urun,adet:Math.max(1,parse(qrAdet)||1)}]); }catch(e){ alert("Etiket oluşturulamadı: "+(e.message||e)); } finally{ setYukleniyor(false);} }} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}><Printer size={15}/> Etiket Bas</button>
+          <button onClick={()=>setQr(null)} className="ml-auto rounded-lg px-4 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Kapat</button>
+        </div>
+      </Modal>)}
       {buyuk&&(<Modal genis title={buyuk.ad} onClose={()=>setBuyuk(null)}>
         <img src={buyuk.foto} alt="" className="w-full rounded-xl object-contain" style={{maxHeight:"75vh",background:C.paper}}/>
         <div className="mt-3 text-sm" style={{color:C.inkSoft}}>{buyuk.kod}{buyuk.renk?` \u00b7 ${buyuk.renk}`:""} \u00b7 stok {sayi(buyuk.stok)} {buyuk.birim} \u00b7 <b style={{color:C.gelir}}>{tl(buyuk.satis)}</b></div>
@@ -537,6 +559,7 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
             <Td r mono><div className="font-medium" style={{color:kar>=0?C.gelir:C.gider}}>{tl(kar)}</div><div className="text-xs" style={{color:C.inkSoft}}>{dov(kar,kur)}</div><div className="text-xs font-semibold" style={{color:kToplam>=0?C.gelir:C.gider}}>toplam {tl(kToplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(kToplam,kur)}</div></Td>
             <Td r mono style={{color:C.gelir}}>%{marj}</Td>
             <Td r><div className="flex items-center justify-end gap-1">
+              <button onClick={()=>qrAc(s)} className="p-1.5 rounded" title="Bu ürünün QR kodu"><QrCode size={15} color={RENK.satis}/></button>
               <button onClick={()=>duzenleAc(s)} className="p-1.5 rounded" title="Düzenle"><Pencil size={15} color={C.inkSoft}/></button>
               {canDelete&&<SilBtn onClick={()=>A.deleteProduct(s.id)}/>}
             </div></Td>
@@ -1133,13 +1156,22 @@ function QrTara({products,customers,kur,A,onClose}){
   const [durum,setDurum]=useState("Kamera açılıyor…");
   const [bulunan,setBulunan]=useState(null);
   const durRef=useRef(false);
+  // Ürün listesi arka planda tazelenince kamera yeniden başlamasın diye ref'te tutulur
+  const urunRef=useRef(products); urunRef.current=products;
   useEffect(()=>{
     let akis=null, rafId=null;
+    durRef.current=false;
     (async()=>{
       try{
-        akis=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});
+        if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+          setDurum("Bu tarayıcı kamerayı desteklemiyor. Chrome/Safari ile açın."); return; }
+        try{
+          akis=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});
+        }catch(ilk){ // arka kamera yoksa herhangi bir kamerayı dene
+          akis=await navigator.mediaDevices.getUserMedia({video:true});
+        }
         const v=videoRef.current; if(!v) return;
-        v.srcObject=akis; v.setAttribute("playsinline","true"); await v.play();
+        v.srcObject=akis; v.setAttribute("playsinline","true"); v.muted=true; await v.play();
         setDurum("QR kodu çerçeveye getirin");
         const jsQR=(await import("jsqr")).default;
         const cv=canvasRef.current, ctx=cv.getContext("2d",{willReadFrequently:true});
@@ -1152,7 +1184,7 @@ function QrTara({products,customers,kur,A,onClose}){
             const kod=jsQR(img.data,img.width,img.height,{inversionAttempts:"dontInvert"});
             if(kod&&kod.data){
               const id=uuidBul(kod.data);
-              const u=id?products.find(p=>p.id===id):null;
+              const u=id?(urunRef.current||[]).find(p=>p.id===id):null;
               if(u){ durRef.current=true; setBulunan(u);
                 if(akis) akis.getTracks().forEach(t=>t.stop());
                 if(navigator.vibrate) navigator.vibrate(60);
@@ -1163,14 +1195,19 @@ function QrTara({products,customers,kur,A,onClose}){
           rafId=requestAnimationFrame(tara);
         };
         rafId=requestAnimationFrame(tara);
-      }catch(e){ setDurum("Kamera açılamadı: "+(e.message||"izin verilmedi")); }
+      }catch(e){
+        const ad=String(e&&e.name||"");
+        setDurum(ad==="NotAllowedError"?"Kamera izni verilmedi. Tarayıcı ayarlarından bu siteye kamera izni verin."
+          :ad==="NotFoundError"?"Kamera bulunamadı."
+          :"Kamera açılamadı: "+(e.message||ad||"bilinmeyen hata"));
+      }
     })();
     return ()=>{ durRef.current=true; if(rafId) cancelAnimationFrame(rafId); if(akis) akis.getTracks().forEach(t=>t.stop()); };
-  },[products]);
+  },[]);
   return (
     <Modal title={bulunan?"Ürün Bulundu":"QR Okut"} onClose={onClose}>
       {!bulunan&&(<div>
-        <div className="relative rounded-xl overflow-hidden" style={{background:"#000",aspectRatio:"4/3"}}>
+        <div className="relative rounded-xl overflow-hidden" style={{background:"#000",aspectRatio:"4/3",minHeight:240}}>
           <video ref={videoRef} className="w-full h-full object-cover" muted playsInline/>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div style={{width:"60%",aspectRatio:"1",border:`3px solid ${RENK.satis}`,borderRadius:16,boxShadow:"0 0 0 9999px rgba(0,0,0,.35)"}}/>
