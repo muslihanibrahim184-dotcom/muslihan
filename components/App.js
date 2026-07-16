@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Trash2, Search, Boxes, ShoppingCart, Users, Truck, Scissors, LayoutDashboard,
   AlertTriangle, TrendingUp, X, Receipt, Coins, ArrowUpRight, ArrowDownRight, ScrollText,
@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v31"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v33"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -204,7 +204,7 @@ export default function App({ session }) {
             </button>);})}
         </div>
 
-        {aktif==="ozet" && <Ozet {...{stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,kumasciBorc,tedarikciBorc,alinanCek,verilenCek,cheques,sales,products,kur}} git={setSekme}/>}
+        {aktif==="ozet" && <Ozet {...{stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,kumasciBorc,tedarikciBorc,alinanCek,verilenCek,cheques,sales,products,giderler,kur}} git={setSekme}/>}
         {aktif==="satis" && <Satis {...{products,customers,sales,kur,A,canDelete}}/>}
         {aktif==="urun" && <Urunler {...{products,stokDeger,kur,A,canDelete}}/>}
         {aktif==="musteri" && <Musteriler {...{customers,sales,collections,orders,products,musteriAlacak,kur,A,canDelete}}/>}
@@ -220,13 +220,21 @@ export default function App({ session }) {
 }
 
 // === GENEL BAKIŞ ============================================================
-function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,kumasciBorc,tedarikciBorc,alinanCek,verilenCek,cheques,sales,products,kur,git}){
+function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,kumasciBorc,tedarikciBorc,alinanCek,verilenCek,cheques,sales,products,giderler=[],kur,git}){
   const sonSatis=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1)).slice(0,5);
   const kritikler=products.filter(kritikMi);
   const yaklasan=[...cheques].filter(c=>c.durum==="Portföyde"||c.durum==="Beklemede").sort((a,b)=>a.vade.localeCompare(b.vade)).slice(0,5);
-  const gunAgg={}; sales.forEach(s=>{const g=(s.tarih||"").slice(0,10); if(!g)return; const o=gunAgg[g]||(gunAgg[g]={ciro:0,kar:0,iade:0,n:0}); o.ciro+=N(s.tutar); o.kar+=N(s.kar); if(s.odeme==="iade") o.iade+=Math.abs(N(s.tutar)); else o.n+=1;});
+  const gunAgg={}; sales.forEach(s=>{const g=(s.tarih||"").slice(0,10); if(!g)return; const o=gunAgg[g]||(gunAgg[g]={ciro:0,kar:0,iade:0,gider:0,n:0}); o.ciro+=N(s.tutar); o.kar+=N(s.kar); if(s.odeme==="iade") o.iade+=Math.abs(N(s.tutar)); else o.n+=1;});
+  giderler.forEach(g=>{const t=(g.tarih||(g.created_at||"")).slice(0,10); if(!t)return; const o=gunAgg[t]||(gunAgg[t]={ciro:0,kar:0,iade:0,gider:0,n:0}); o.gider+=N(g.amount);});
   const gunler=Object.entries(gunAgg).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,14);
   const bugunCiro=gunAgg[TODAY]?.ciro||0, bugunKar=gunAgg[TODAY]?.kar||0;
+  // Ay bazlı: ciro (TL/$/€), iade, kâr, gider, net
+  const ayAgg={}; sales.forEach(s=>{const a=(s.tarih||"").slice(0,7); if(!a)return; const o=ayAgg[a]||(ayAgg[a]={ciro:0,kar:0,iade:0,gider:0,n:0}); o.ciro+=N(s.tutar); o.kar+=N(s.kar); if(s.odeme==="iade") o.iade+=Math.abs(N(s.tutar)); else o.n+=1;});
+  giderler.forEach(g=>{const a=(g.tarih||(g.created_at||"")).slice(0,7); if(!a)return; const o=ayAgg[a]||(ayAgg[a]={ciro:0,kar:0,iade:0,gider:0,n:0}); o.gider+=N(g.amount);});
+  const aylar=Object.entries(ayAgg).sort((a,b)=>a[0]<b[0]?1:-1);
+  const ayTop=aylar.reduce((t,[,o])=>({ciro:t.ciro+o.ciro,kar:t.kar+o.kar,gider:t.gider+o.gider,iade:t.iade+o.iade}),{ciro:0,kar:0,gider:0,iade:0});
+  const [acikAy,setAcikAy]=useState(null);
+  const ayAdi=(a)=>{const [y,m]=a.split("-"); return `${AYLAR[Number(m)-1]} ${y}`;};
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -243,14 +251,51 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
       </div>
       <div className="rounded-xl border overflow-hidden" style={{background:C.surface,borderColor:C.hair}}>
         <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider px-4 pt-4 pb-2" style={{color:C.inkSoft}}><CalendarClock size={14}/> Günlük Ciro <span className="normal-case font-normal" style={{color:C.inkSoft}}>· son {gunler.length} gün</span></h3>
-        <Tablo bare><thead><Tr head><Th>Tarih</Th><Th r>Ciro</Th><Th r>İade</Th><Th r>Kâr</Th></Tr></thead><tbody>
+        <Tablo bare><thead><Tr head><Th>Tarih</Th><Th r>Ciro</Th><Th r>İade</Th><Th r>Masraf</Th><Th r>Kâr</Th></Tr></thead><tbody>
           {gunler.map(([g,o])=>(<Tr key={g}>
             <Td><span className="tabular-nums" style={{color:g===TODAY?C.ink:C.inkSoft,fontWeight:g===TODAY?700:400}}>{fTarih(g)}{g===TODAY?" · bugün":""}</span></Td>
             <Td r mono bold style={{color:N(o.ciro)>=0?C.ink:C.gider}}>{tl(o.ciro)}<div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(o.ciro,kur)}</div></Td>
             <Td r mono style={{color:C.gider}}>{o.iade>0?"−"+tl(o.iade):"—"}</Td>
+            <Td r mono style={{color:C.gider}}>{o.gider>0?"−"+tl(o.gider):"—"}</Td>
             <Td r mono style={{color:N(o.kar)>=0?C.gelir:C.gider}}>{tl(o.kar)}</Td>
           </Tr>))}
           {gunler.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz satış yok.</span></Td></Tr>}
+        </tbody></Tablo>
+      </div>
+      <div className="rounded-xl border overflow-hidden" style={{background:C.surface,borderColor:C.hair}}>
+        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider px-4 pt-4 pb-2" style={{color:C.inkSoft}}><CalendarClock size={14}/> Aylık Ciro <span className="normal-case font-normal" style={{color:C.inkSoft}}>· tüm aylar · aya tıkla, günleri gör</span></h3>
+        <Tablo bare><thead><Tr head><Th>Ay</Th><Th r>Ciro ₺</Th><Th r>Ciro $</Th><Th r>Ciro €</Th><Th r>İade</Th><Th r>Masraf</Th><Th r>Kâr</Th></Tr></thead><tbody>
+          {aylar.map(([a,o])=>{const acik=acikAy===a; const gunlerAy=Object.entries(gunAgg).filter(([g])=>g.startsWith(a)).sort((x,y)=>x[0]<y[0]?1:-1); return(
+            <Fragment key={a}>
+              <Tr onClick={()=>setAcikAy(acik?null:a)}>
+                <Td><span className="font-medium">{ayAdi(a)}</span><div className="text-xs" style={{color:C.inkSoft}}>{o.n} satış · {acik?"gizle":"günleri gör"}</div></Td>
+                <Td r mono bold>{tl(o.ciro)}</Td>
+                <Td r mono style={{color:C.inkSoft}}>${d2(N(o.ciro)/kur.usd)}</Td>
+                <Td r mono style={{color:C.inkSoft}}>€{d2(N(o.ciro)/kur.eur)}</Td>
+                <Td r mono style={{color:C.gider}}>{o.iade>0?"−"+tl(o.iade):"—"}</Td>
+                <Td r mono style={{color:C.gider}}>{o.gider>0?"−"+tl(o.gider):"—"}</Td>
+                <Td r mono style={{color:N(o.kar)>=0?C.gelir:C.gider}}>{tl(o.kar)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>net {tl(N(o.kar)-N(o.gider))}</div></Td>
+              </Tr>
+              {acik&&gunlerAy.map(([g,d])=>(<Tr key={g}>
+                <Td><span className="tabular-nums pl-4 text-xs" style={{color:C.inkSoft}}>↳ {fTarih(g)}</span></Td>
+                <Td r mono style={{color:C.inkSoft}}>{tl(d.ciro)}</Td>
+                <Td r mono style={{color:C.inkSoft}}>${d2(N(d.ciro)/kur.usd)}</Td>
+                <Td r mono style={{color:C.inkSoft}}>€{d2(N(d.ciro)/kur.eur)}</Td>
+                <Td r mono style={{color:C.inkSoft}}>{d.iade>0?"−"+tl(d.iade):"—"}</Td>
+                <Td r mono style={{color:d.gider>0?C.gider:C.inkSoft}}>{d.gider>0?"−"+tl(d.gider):"—"}</Td>
+                <Td r mono style={{color:C.inkSoft}}>{tl(d.kar)}</Td>
+              </Tr>))}
+            </Fragment>);})}
+          {aylar.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Henüz kayıt yok.</span></Td></Tr>}
+          {aylar.length>0&&<Tr>
+            <Td><span className="font-semibold">TOPLAM</span></Td>
+            <Td r mono bold>{tl(ayTop.ciro)}</Td>
+            <Td r mono bold style={{color:C.inkSoft}}>${d2(N(ayTop.ciro)/kur.usd)}</Td>
+            <Td r mono bold style={{color:C.inkSoft}}>€{d2(N(ayTop.ciro)/kur.eur)}</Td>
+            <Td r mono style={{color:C.gider}}>{ayTop.iade>0?"−"+tl(ayTop.iade):"—"}</Td>
+            <Td r mono style={{color:C.gider}}>{ayTop.gider>0?"−"+tl(ayTop.gider):"—"}</Td>
+            <Td r mono bold style={{color:N(ayTop.kar)>=0?C.gelir:C.gider}}>{tl(ayTop.kar)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>net {tl(N(ayTop.kar)-N(ayTop.gider))}</div></Td>
+          </Tr>}
         </tbody></Tablo>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -897,6 +942,9 @@ function Gider({giderler=[],toplamGider,kur,A,canDelete}){
   const [f,setF]=useState({aciklama:"",tutar:"",tarih:TODAY});
   const ekle=async()=>{ const tutar=parse(f.tutar); if(tutar<=0) return; await A.addExpense({aciklama:f.aciklama.trim()||"Gider",amount:tutar,tarih:f.tarih}); setF({aciklama:"",tutar:"",tarih:f.tarih}); };
   const HIZLI=["Benzin","Yemek","Kira","Fatura","Nakliye","Personel"];
+  const ayG={}; giderler.forEach(g=>{const a=(g.tarih||(g.created_at||"")).slice(0,7); if(!a)return; ayG[a]=(ayG[a]||0)+N(g.amount);});
+  const ayListe=Object.entries(ayG).sort((a,b)=>a[0]<b[0]?1:-1);
+  const ayAdi=(a)=>{const [y,m]=a.split("-"); return `${AYLAR[Number(m)-1]} ${y}`;};
   return (
     <div className="space-y-4">
       <Ozetcik etiket="Toplam Gider" deger={tl(toplamGider)} dov={dov(toplamGider,kur)} renk={C.gider} alt={`${giderler.length} kayıt · kasadan çıktı`}/>
@@ -911,6 +959,18 @@ function Gider({giderler=[],toplamGider,kur,A,canDelete}){
             <input type="date" value={f.tarih} onChange={e=>setF({...f,tarih:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
             <button onClick={ekle} className="whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gider}}>Ekle</button></div></div>
         </div>
+      </div>
+      <div className="rounded-xl border overflow-hidden" style={{background:C.surface,borderColor:C.hair}}>
+        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider px-4 pt-4 pb-2" style={{color:C.inkSoft}}><CalendarClock size={14}/> Aylık Masraf</h3>
+        <Tablo bare><thead><Tr head><Th>Ay</Th><Th r>Masraf ₺</Th><Th r>$</Th><Th r>€</Th></Tr></thead><tbody>
+          {ayListe.map(([a,t])=>(<Tr key={a}>
+            <Td><span className="font-medium">{ayAdi(a)}</span></Td>
+            <Td r mono bold style={{color:C.gider}}>−{tl(t)}</Td>
+            <Td r mono style={{color:C.inkSoft}}>${d2(t/kur.usd)}</Td>
+            <Td r mono style={{color:C.inkSoft}}>€{d2(t/kur.eur)}</Td>
+          </Tr>))}
+          {ayListe.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Kayıt yok.</span></Td></Tr>}
+        </tbody></Tablo>
       </div>
       <Tablo><thead><Tr head><Th>Tarih</Th><Th>Açıklama</Th><Th r>Tutar</Th><Th></Th></Tr></thead><tbody>
         {giderler.map(g=>(<Tr key={g.id}>
@@ -1071,7 +1131,7 @@ function Inp({label,v,set,num,cls=""}){
 }
 function Lbl({children}){return <label className="block text-xs font-medium mb-1.5" style={{color:C.inkSoft}}>{children}</label>;}
 function Tablo({children,bare}){return <div className={bare?"overflow-x-auto":"rounded-xl border overflow-x-auto"} style={bare?{}:{background:C.surface,borderColor:C.hair}}><table className="w-full text-sm">{children}</table></div>;}
-function Tr({children,head}){return <tr className={head?"":"border-t group"} style={head?{}:{borderColor:C.hair}}>{children}</tr>;}
+function Tr({children,head,onClick}){return <tr onClick={onClick} className={`${head?"":"border-t group"} ${onClick?"cursor-pointer hover:bg-black/[0.02]":""}`} style={head?{}:{borderColor:C.hair}}>{children}</tr>;}
 function Th({children,r}){return <th className={`px-4 py-3 text-xs uppercase tracking-wider font-medium whitespace-nowrap ${r?"text-right":"text-left"}`} style={{color:C.inkSoft}}>{children}</th>;}
 function Td({children,r,mono,bold,style={}}){return <td className={`px-4 py-3 align-top ${r?"text-right":"text-left"} ${mono?"tabular-nums":""} ${bold?"font-semibold":""}`} style={style}>{children}</td>;}
 function Rozet({children,renk,bg}){return <span className="text-xs px-1.5 py-0.5 rounded capitalize whitespace-nowrap" style={{background:bg,color:renk}}>{children}</span>;}
