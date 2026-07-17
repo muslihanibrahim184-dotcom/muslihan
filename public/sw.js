@@ -1,5 +1,5 @@
 // Service worker — uygulama kabuğunu önbelleğe alır, yeni sürümde kendini günceller.
-const CACHE = "muslihan-v40";
+const CACHE = "muslihan-v42";
 const SHELL = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {

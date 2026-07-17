@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v40"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v42"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -728,7 +728,10 @@ function Musteriler({customers,sales,collections,orders=[],products=[],musteriAl
         </div>
         <Tablo bare><tbody>{orders.filter(o=>o.musteri_id===detay.id).map(o=>(<Tr key={o.id}>
           <Td><div className="font-medium whitespace-pre-line">{o.aciklama||"Sipariş"}</div><div className="text-xs" style={{color:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}`:""}{o.notu?` · ${o.notu}`:""}</div></Td>
-          <Td r mono><div className="font-semibold">{tl(o.toplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>kapora {tl(o.kapora)} · kalan {tl(N(o.toplam)-N(o.kapora))}</div></Td>
+          <Td r mono><div className="font-semibold">{tl(o.toplam)}</div>
+              <div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(N(o.toplam),kur)}</div>
+              <div className="text-xs font-normal mt-1" style={{color:C.inkSoft}}>kapora {tl(o.kapora)}{N(o.kapora)>0?` (${dov(N(o.kapora),kur)})`:""}</div>
+              <div className="text-xs font-normal" style={{color:C.gold}}>kalan {tl(N(o.toplam)-N(o.kapora))}{N(o.toplam)-N(o.kapora)>0?` · ${dov(N(o.toplam)-N(o.kapora),kur)}`:""}</div></Td>
           <Td><Rozet renk={o.durum==="Teslim Edildi"?C.gelir:o.durum==="İptal"?C.gider:C.gold} bg={o.durum==="Teslim Edildi"?C.gelirBg:o.durum==="İptal"?C.giderBg:C.goldBg}>{o.durum}</Rozet></Td>
         </Tr>))}{orders.filter(o=>o.musteri_id===detay.id).length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Sipariş yok.</span></Td></Tr>}</tbody></Tablo>
       </Modal>}
@@ -996,6 +999,15 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
     const cev=(v)=> v>0 ? fmtInput(toTr((v*carpan(eski))/carpan(yeni))) : "";
     setF({...f,pb:yeni,toplam:t>0?cev(t):f.toplam,kapora:k>0?cev(k):f.kapora}); };
   const [filtre,setFiltre]=useState("acik");
+  const [duz,setDuz]=useState(null);
+  const duzAc=(o)=>setDuz({id:o.id,musteriId:o.musteri_id||"",aciklama:o.aciklama||"",toplam:fmtInput(toTr(N(o.toplam))),kapora:fmtInput(toTr(N(o.kapora))),pb:"TL",notu:o.notu||"",teslim:o.teslim||"",durum:o.durum||"Bekliyor"});
+  const duzPbDegis=(yeni)=>{ const eski=duz.pb||"TL"; const t=parse(duz.toplam), k=parse(duz.kapora);
+    const cev=(v)=> v>0 ? fmtInput(toTr((v*carpan(eski))/carpan(yeni))) : "";
+    setDuz({...duz,pb:yeni,toplam:t>0?cev(t):duz.toplam,kapora:k>0?cev(k):duz.kapora}); };
+  const duzKaydet=async()=>{ const c=carpan(duz.pb); const m=customers.find(x=>x.id===duz.musteriId)||null;
+    await A.updateOrder(duz.id,{musteri_id:m?.id||null,musteri_ad:m?.ad||"",aciklama:duz.aciklama.trim(),
+      toplam:parse(duz.toplam)*c,kapora:parse(duz.kapora)*c,notu:duz.notu.trim(),teslim:duz.teslim||null,durum:duz.durum});
+    setDuz(null); };
   const ekle=async()=>{ const c=carpan(f.pb); const toplam=parse(f.toplam)*c, kapora=parse(f.kapora)*c; if(!f.aciklama.trim()&&toplam<=0) return;
     const m=customers.find(x=>x.id===f.musteriId)||null;
     const not=f.pb!=="TL" ? `${f.notu.trim()?f.notu.trim()+" · ":""}${{USD:"$",EUR:"€"}[f.pb]}${f.toplam} sipariş` : f.notu.trim();
@@ -1030,14 +1042,41 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
       <Tablo><thead><Tr head><Th>Sipariş</Th><Th>Müşteri</Th><Th r>Tutar</Th><Th>Durum</Th><Th></Th></Tr></thead><tbody>
         {goster.map(o=>{const gec=o.teslim&&o.teslim<TODAY&&o.durum!=="Teslim Edildi"&&o.durum!=="İptal"; return(
           <Tr key={o.id}>
-            <Td><div className="font-medium whitespace-pre-line">{o.aciklama||"Sipariş"}</div><div className="text-xs" style={{color:gec?C.gider:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}${gec?" (geçti)":""}`:""}{o.notu?` · ${o.notu}`:""}</div></Td>
+            <Td><button onClick={()=>duzAc(o)} className="text-left w-full group/d" title="Düzenlemek için tıkla">
+              <div className="font-medium whitespace-pre-line group-hover/d:underline">{o.aciklama||"Sipariş"}</div>
+              <div className="text-xs" style={{color:gec?C.gider:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}${gec?" (geçti)":""}`:""}{o.notu?` · ${o.notu}`:""} · <span style={{color:RENK.siparis}}>düzenle</span></div>
+            </button></Td>
             <Td><span style={{color:C.inkSoft}}>{o.musteri_ad||"—"}</span></Td>
-            <Td r mono><div className="font-semibold">{tl(o.toplam)}</div><div className="text-xs font-normal" style={{color:C.inkSoft}}>kapora {tl(o.kapora)} · kalan {tl(N(o.toplam)-N(o.kapora))}</div></Td>
+            <Td r mono><div className="font-semibold">{tl(o.toplam)}</div>
+              <div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(N(o.toplam),kur)}</div>
+              <div className="text-xs font-normal mt-1" style={{color:C.inkSoft}}>kapora {tl(o.kapora)}{N(o.kapora)>0?` (${dov(N(o.kapora),kur)})`:""}</div>
+              <div className="text-xs font-normal" style={{color:C.gold}}>kalan {tl(N(o.toplam)-N(o.kapora))}{N(o.toplam)-N(o.kapora)>0?` · ${dov(N(o.toplam)-N(o.kapora),kur)}`:""}</div></Td>
             <Td><select value={o.durum} onChange={e=>A.updateOrder(o.id,{durum:e.target.value})} className="rounded px-2 py-1 text-xs font-medium outline-none" style={{background:dBg(o.durum),color:dRenk(o.durum),border:"none"}}>{DURUMLAR.map(d=><option key={d}>{d}</option>)}</select></Td>
             <Td>{canDelete&&<SilBtn onClick={()=>A.deleteOrder(o.id)}/>}</Td>
           </Tr>);})}
         {goster.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Sipariş yok.</span></Td></Tr>}
       </tbody></Tablo>
+      {duz&&(<Modal title="Siparişi Düzenle" onClose={()=>setDuz(null)}>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2"><Lbl>Müşteri</Lbl><select value={duz.musteriId} onChange={e=>setDuz({...duz,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Müşterisiz</option>{customers.map(c=><option key={c.id} value={c.id}>{c.ad}</option>)}</select></div>
+          <div className="col-span-2"><Lbl>Açıklama (her satıra bir kalem)</Lbl><textarea value={duz.aciklama} onChange={e=>setDuz({...duz,aciklama:e.target.value})} rows={4} className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div><Lbl>Toplam</Lbl><div className="flex gap-1.5">
+            <select value={duz.pb} onChange={e=>duzPbDegis(e.target.value)} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${duz.pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:duz.pb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+            <input value={duz.toplam} onChange={e=>setDuz({...duz,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div></div>
+          <div><Lbl>Kapora</Lbl><div className="flex gap-1.5">
+            <input value={duz.kapora} onChange={e=>setDuz({...duz,kapora:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
+            <button onClick={()=>setDuz({...duz,kapora:fmtInput(String(Math.round(parse(duz.toplam)*10)/100).replace(".",","))})} title="Toplamın %10'u" className="whitespace-nowrap rounded-lg px-2 text-xs font-semibold" style={{border:`1px solid ${C.gold}`,color:C.gold}}>%10</button></div></div>
+          <div><Lbl>Teslim Tarihi</Lbl><input type="date" value={duz.teslim} onChange={e=>setDuz({...duz,teslim:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div><Lbl>Durum</Lbl><select value={duz.durum} onChange={e=>setDuz({...duz,durum:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}>{DURUMLAR.map(d=><option key={d}>{d}</option>)}</select></div>
+          <div className="col-span-2"><Lbl>Not</Lbl><input value={duz.notu} onChange={e=>setDuz({...duz,notu:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+        </div>
+        {parse(duz.toplam)>0&&<div className="text-xs tabular-nums mt-2" style={{color:C.inkSoft}}>Kalan: <b style={{color:C.ink}}>{tl((parse(duz.toplam)-parse(duz.kapora))*carpan(duz.pb))}</b>{duz.pb!=="TL"?` · toplam ≈ ${tl(parse(duz.toplam)*carpan(duz.pb))}`:""}</div>}
+        <div className="rounded-lg p-2.5 mt-3 text-xs" style={{background:C.goldBg,color:C.gold}}>Not: Kaporayı değiştirirsen kasaya daha önce girmiş kapora kaydı kendiliğinden düzelmez.</div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={()=>setDuz(null)} className="rounded-lg px-4 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Vazgeç</button>
+          <button onClick={duzKaydet} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Güncelle</button>
+        </div>
+      </Modal>)}
     </div>
   );
 }
