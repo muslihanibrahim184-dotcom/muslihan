@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v39"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v40"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -583,7 +583,12 @@ function Musteriler({customers,sales,collections,orders=[],products=[],musteriAl
   const [ac,setAc]=useState(false);
   const [ny,setNy]=useState({ad:"",telefon:"",adres:"",vergi_no:"",notu:"",acilis:""});
   const [th,setTh]=useState({musteriId:"",tutar:"",pb:"TL",tarih:TODAY}); const [detay,setDetay]=useState(null);
-  const [sip,setSip]=useState({aciklama:"",toplam:"",kapora:"",notu:"",teslim:""});
+  const [sip,setSip]=useState({aciklama:"",toplam:"",kapora:"",pb:"TL",notu:"",teslim:""});
+  const sCarpan=(x)=>x==="USD"?kur.usd:x==="EUR"?kur.eur:1;
+  const sToTr=(n)=>String(Math.round(Number(n)*100)/100).replace(".",",");
+  const sipPbDegis=(yeni)=>{ const eski=sip.pb||"TL"; const t=parse(sip.toplam), k=parse(sip.kapora);
+    const cev=(v)=> v>0 ? fmtInput(sToTr((v*sCarpan(eski))/sCarpan(yeni))) : "";
+    setSip({...sip,pb:yeni,toplam:t>0?cev(t):sip.toplam,kapora:k>0?cev(k):sip.kapora}); };
   const [iade,setIade]=useState({urunId:"",adet:"",tutar:"",tur:"hesap",tarih:TODAY,aciklama:""});
   const iadeYap=async()=>{ if(!detay) return; const tutar=parse(iade.tutar),adet=parse(iade.adet);
     const urun=products.find(p=>p.id===iade.urunId)||null;
@@ -591,10 +596,11 @@ function Musteriler({customers,sales,collections,orders=[],products=[],musteriAl
     if(efTutar<=0 && !(urun&&adet>0)) return;
     await A.customerReturn({musteriId:detay.id,urunId:urun?.id||null,adet,tutar:efTutar,tur:iade.tur,tarih:iade.tarih,aciklama:iade.aciklama.trim()});
     setIade({urunId:"",adet:"",tutar:"",tur:iade.tur,tarih:iade.tarih,aciklama:""}); };
-  const sipEkle=async()=>{ if(!detay) return; const toplam=parse(sip.toplam), kapora=parse(sip.kapora);
+  const sipEkle=async()=>{ if(!detay) return; const c=sCarpan(sip.pb); const toplam=parse(sip.toplam)*c, kapora=parse(sip.kapora)*c;
     if(!sip.aciklama.trim()&&toplam<=0) return;
-    await A.addOrder({musteri_id:detay.id,musteri_ad:detay.ad,aciklama:sip.aciklama.trim(),toplam,kapora,notu:sip.notu.trim(),teslim:sip.teslim||null,tarih:TODAY});
-    setSip({aciklama:"",toplam:"",kapora:"",notu:"",teslim:""}); };
+    const not=sip.pb!=="TL" ? `${sip.notu.trim()?sip.notu.trim()+" · ":""}${{USD:"$",EUR:"€"}[sip.pb]}${sip.toplam} sipariş` : sip.notu.trim();
+    await A.addOrder({musteri_id:detay.id,musteri_ad:detay.ad,aciklama:sip.aciklama.trim(),toplam,kapora,notu:not,teslim:sip.teslim||null,tarih:TODAY});
+    setSip({aciklama:"",toplam:"",kapora:"",pb:sip.pb,notu:"",teslim:""}); };
   const [bilgiDuzenle,setBilgiDuzenle]=useState(false); const [bf,setBf]=useState({telefon:"",adres:"",vergi_no:"",notu:""});
   const yeni=async()=>{ if(!ny.ad.trim())return; await A.addCustomer({ad:ny.ad.trim(),telefon:ny.telefon.trim(),adres:ny.adres.trim(),vergi_no:ny.vergi_no.trim(),notu:ny.notu.trim(),bakiye:parse(ny.acilis)}); setNy({ad:"",telefon:"",adres:"",vergi_no:"",notu:"",acilis:""}); setAc(false); };
   const acDetay=(m)=>{ setBilgiDuzenle(false); setDetay(m); };
@@ -705,8 +711,10 @@ function Musteriler({customers,sales,collections,orders=[],products=[],musteriAl
         <div className="rounded-lg border p-3 mb-3" style={{borderColor:C.hair,background:C.paper}}>
           <div className="grid grid-cols-2 gap-2.5">
             <div className="col-span-2"><Lbl>Açıklama (her satıra bir kalem)</Lbl><textarea value={sip.aciklama} onChange={e=>setSip({...sip,aciklama:e.target.value})} rows={3} placeholder={"ör.\n500 adet dalgıç takım kırmızı/siyah/mavi\n500 tişört\n500 kapri"} className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
-            <div><Lbl>Toplam Tutar ₺</Lbl><input value={sip.toplam} onChange={e=>setSip({...sip,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
-            <div><Lbl>Kapora ₺</Lbl>
+            <div><Lbl>Toplam Tutar</Lbl><div className="flex gap-1.5">
+              <select value={sip.pb} onChange={e=>sipPbDegis(e.target.value)} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${sip.pb!=="TL"?C.gold:C.hair}`,background:C.surface,color:sip.pb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+              <input value={sip.toplam} onChange={e=>setSip({...sip,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div></div>
+            <div><Lbl>Kapora</Lbl>
               <div className="flex gap-1.5">
                 <input value={sip.kapora} onChange={e=>setSip({...sip,kapora:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.surface}}/>
                 <button onClick={()=>setSip({...sip,kapora:fmtInput(String(Math.round(parse(sip.toplam)*10)/100).replace(".",","))})} title="Toplamın %10'u" className="whitespace-nowrap rounded-lg px-2 text-xs font-semibold" style={{border:`1px solid ${C.gold}`,color:C.gold}}>%10</button>
@@ -715,7 +723,7 @@ function Musteriler({customers,sales,collections,orders=[],products=[],musteriAl
             <div><Lbl>Teslim Tarihi (ops.)</Lbl><input type="date" value={sip.teslim} onChange={e=>setSip({...sip,teslim:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
             <div><Lbl>Not (ops.)</Lbl><input value={sip.notu} onChange={e=>setSip({...sip,notu:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/></div>
           </div>
-          {parse(sip.toplam)>0&&<div className="text-xs tabular-nums mt-2" style={{color:C.inkSoft}}>Kalan (teslimde): <b style={{color:C.ink}}>{tl(parse(sip.toplam)-parse(sip.kapora))}</b>{parse(sip.kapora)>0?` · kapora ${tl(parse(sip.kapora))} kasaya girer`:""}</div>}
+          {parse(sip.toplam)>0&&<div className="text-xs tabular-nums mt-2" style={{color:C.inkSoft}}>Kalan (teslimde): <b style={{color:C.ink}}>{tl((parse(sip.toplam)-parse(sip.kapora))*sCarpan(sip.pb))}</b>{parse(sip.kapora)>0?` · kapora ${tl(parse(sip.kapora)*sCarpan(sip.pb))} kasaya girer`:""}{sip.pb!=="TL"?` · toplam ≈ ${tl(parse(sip.toplam)*sCarpan(sip.pb))}`:""}</div>}
           <div className="flex justify-end mt-2"><button onClick={sipEkle} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Sipariş Ekle</button></div>
         </div>
         <Tablo bare><tbody>{orders.filter(o=>o.musteri_id===detay.id).map(o=>(<Tr key={o.id}>
@@ -981,12 +989,18 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
   const dRenk=(d)=>d==="Teslim Edildi"?C.gelir:d==="İptal"?C.gider:d==="Hazır"?C.gelir:C.gold;
   const dBg=(d)=>d==="Teslim Edildi"?C.gelirBg:d==="İptal"?C.giderBg:d==="Hazır"?C.gelirBg:C.goldBg;
   const [ac,setAc]=useState(false);
-  const [f,setF]=useState({musteriId:"",aciklama:"",toplam:"",kapora:"",notu:"",teslim:""});
+  const [f,setF]=useState({musteriId:"",aciklama:"",toplam:"",kapora:"",pb:"TL",notu:"",teslim:""});
+  const carpan=(x)=>x==="USD"?kur.usd:x==="EUR"?kur.eur:1;
+  const toTr=(n)=>String(Math.round(Number(n)*100)/100).replace(".",",");
+  const pbDegis=(yeni)=>{ const eski=f.pb||"TL"; const t=parse(f.toplam), k=parse(f.kapora);
+    const cev=(v)=> v>0 ? fmtInput(toTr((v*carpan(eski))/carpan(yeni))) : "";
+    setF({...f,pb:yeni,toplam:t>0?cev(t):f.toplam,kapora:k>0?cev(k):f.kapora}); };
   const [filtre,setFiltre]=useState("acik");
-  const ekle=async()=>{ const toplam=parse(f.toplam),kapora=parse(f.kapora); if(!f.aciklama.trim()&&toplam<=0) return;
-    const m=customers.find(c=>c.id===f.musteriId)||null;
-    await A.addOrder({musteri_id:m?.id||null,musteri_ad:m?.ad||"",aciklama:f.aciklama.trim(),toplam,kapora,notu:f.notu.trim(),teslim:f.teslim||null,tarih:TODAY});
-    setF({musteriId:f.musteriId,aciklama:"",toplam:"",kapora:"",notu:"",teslim:""}); setAc(false); };
+  const ekle=async()=>{ const c=carpan(f.pb); const toplam=parse(f.toplam)*c, kapora=parse(f.kapora)*c; if(!f.aciklama.trim()&&toplam<=0) return;
+    const m=customers.find(x=>x.id===f.musteriId)||null;
+    const not=f.pb!=="TL" ? `${f.notu.trim()?f.notu.trim()+" · ":""}${{USD:"$",EUR:"€"}[f.pb]}${f.toplam} sipariş` : f.notu.trim();
+    await A.addOrder({musteri_id:m?.id||null,musteri_ad:m?.ad||"",aciklama:f.aciklama.trim(),toplam,kapora,notu:not,teslim:f.teslim||null,tarih:TODAY});
+    setF({musteriId:f.musteriId,aciklama:"",toplam:"",kapora:"",pb:f.pb,notu:"",teslim:""}); setAc(false); };
   const goster=[...orders].filter(o=>filtre==="hepsi"?true:filtre==="acik"?(o.durum!=="Teslim Edildi"&&o.durum!=="İptal"):o.durum===filtre).sort((a,b)=>((a.teslim||a.tarih)>(b.teslim||b.tarih)?1:-1));
   const acikTutar=orders.filter(o=>o.durum!=="Teslim Edildi"&&o.durum!=="İptal").reduce((a,b)=>a+(N(b.toplam)-N(b.kapora)),0);
   return (
@@ -999,14 +1013,16 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="col-span-2"><Lbl>Müşteri</Lbl><select value={f.musteriId} onChange={e=>setF({...f,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin (ops.)…</option>{customers.map(c=><option key={c.id} value={c.id}>{c.ad}</option>)}</select></div>
           <div className="col-span-2"><Lbl>Açıklama (her satıra bir kalem)</Lbl><textarea value={f.aciklama} onChange={e=>setF({...f,aciklama:e.target.value})} rows={3} placeholder={"ör.\n500 adet dalgıç takım kırmızı/siyah/mavi\n500 tişört\n500 kapri"} className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
-          <div><Lbl>Toplam ₺</Lbl><input value={f.toplam} onChange={e=>setF({...f,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
-          <div><Lbl>Kapora ₺</Lbl><div className="flex gap-1.5">
+          <div><Lbl>Toplam</Lbl><div className="flex gap-1.5">
+            <select value={f.pb} onChange={e=>pbDegis(e.target.value)} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${f.pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:f.pb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+            <input value={f.toplam} onChange={e=>setF({...f,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div></div>
+          <div><Lbl>Kapora</Lbl><div className="flex gap-1.5">
             <input value={f.kapora} onChange={e=>setF({...f,kapora:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
             <button onClick={()=>setF({...f,kapora:fmtInput(String(Math.round(parse(f.toplam)*10)/100).replace(".",","))})} title="Toplamın %10'u" className="whitespace-nowrap rounded-lg px-2 text-xs font-semibold" style={{border:`1px solid ${C.gold}`,color:C.gold}}>%10</button></div></div>
           <div><Lbl>Teslim (ops.)</Lbl><input type="date" value={f.teslim} onChange={e=>setF({...f,teslim:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
           <div><Lbl>Not (ops.)</Lbl><input value={f.notu} onChange={e=>setF({...f,notu:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
         </div>
-        {parse(f.toplam)>0&&<div className="text-xs tabular-nums mt-2" style={{color:C.inkSoft}}>Kalan: <b style={{color:C.ink}}>{tl(parse(f.toplam)-parse(f.kapora))}</b>{parse(f.kapora)>0?` · kapora ${tl(parse(f.kapora))} kasaya girer`:""}</div>}
+        {parse(f.toplam)>0&&<div className="text-xs tabular-nums mt-2" style={{color:C.inkSoft}}>Kalan: <b style={{color:C.ink}}>{tl((parse(f.toplam)-parse(f.kapora))*carpan(f.pb))}</b>{parse(f.kapora)>0?` · kapora ${tl(parse(f.kapora)*carpan(f.pb))} kasaya girer`:""}{f.pb!=="TL"?` · toplam ≈ ${tl(parse(f.toplam)*carpan(f.pb))}`:""}</div>}
         <div className="flex justify-end mt-3"><button onClick={ekle} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Kaydet</button></div>
       </div>)}
       <div className="flex gap-1.5 flex-wrap">{[["acik","Açık"],["hepsi","Hepsi"],["Bekliyor","Bekliyor"],["Hazırlanıyor","Hazırlanıyor"],["Hazır","Hazır"],["Teslim Edildi","Teslim"]].map(([k,l])=>(
@@ -1109,10 +1125,17 @@ async function etiketYazdir(liste){ // liste: [{urun, adet}]
 }
 
 function UrunKarti({urun,customers,kur,A,onClose}){
-  const [sf,setSf]=useState({adet:"1",musteriId:"",odeme:"Nakit"});
+  const kCarpan=(x)=>x==="USD"?kur.usd:x==="EUR"?kur.eur:1;
+  const kToTr=(n)=>String(Math.round(Number(n)*100)/100).replace(".",",");
+  const [sf,setSf]=useState({adet:"1",fiyat:fmtInput(kToTr(N(urun.satis))),pb:"TL",musteriId:"",odeme:"Nakit"});
   const [mesaj,setMesaj]=useState("");
+  const fiyatPbDegis=(yeni)=>{ const v=parse(sf.fiyat); const eski=sf.pb||"TL";
+    setSf({...sf,pb:yeni,fiyat:v>0?fmtInput(kToTr((v*kCarpan(eski))/kCarpan(yeni))):sf.fiyat}); };
+  const birimTL=parse(sf.fiyat)*kCarpan(sf.pb);
+  const degisti=birimTL>0&&Math.round(birimTL)!==Math.round(N(urun.satis));
   const sat=async()=>{ const adet=parse(sf.adet); if(adet<=0){setMesaj("Adet girin");return;}
-    const r=await A.sale({urunId:urun.id,adet,musteriId:sf.musteriId||null,odeme:sf.odeme,birimFiyat:N(urun.satis),tarih:TODAY});
+    if(birimTL<=0){setMesaj("Fiyat girin");return;}
+    const r=await A.sale({urunId:urun.id,adet,musteriId:sf.musteriId||null,odeme:sf.odeme,birimFiyat:birimTL,tarih:TODAY});
     if(r){setMesaj(r);return;} setMesaj("\u2713 Satis kaydedildi"); setTimeout(onClose,900); };
   return (<div>
     <div className="rounded-xl border p-4 mb-3" style={{borderColor:C.hair,background:C.paper}}>
@@ -1138,11 +1161,19 @@ function UrunKarti({urun,customers,kur,A,onClose}){
     <h4 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{color:C.inkSoft}}>Hizli Satis</h4>
     <div className="grid grid-cols-2 gap-2.5">
       <div><Lbl>Adet</Lbl><input value={sf.adet} onChange={e=>setSf({...sf,adet:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+      <div><Lbl>Birim Fiyat (degistirilebilir)</Lbl>
+        <div className="flex gap-1.5">
+          <select value={sf.pb} onChange={e=>fiyatPbDegis(e.target.value)} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${sf.pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:sf.pb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+          <input value={sf.fiyat} onChange={e=>setSf({...sf,fiyat:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${degisti?C.gold:C.hair}`,background:C.paper}}/>
+        </div>
+        {degisti&&<div className="text-xs mt-1 flex items-center gap-2" style={{color:C.gold}}>Liste: {tl(urun.satis)}
+          <button onClick={()=>setSf({...sf,pb:"TL",fiyat:fmtInput(kToTr(N(urun.satis)))})} className="underline">geri al</button></div>}
+      </div>
       <div><Lbl>Musteri (ops.)</Lbl><select value={sf.musteriId} onChange={e=>setSf({...sf,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Pesin musteri</option>{customers.map(c=><option key={c.id} value={c.id}>{c.ad}</option>)}</select></div>
       <div className="col-span-2"><Lbl>Odeme Sekli</Lbl><div className="flex gap-1.5 flex-wrap">{["Nakit","Kredi Kartı","Çek","Senet","Veresiye"].map(o=>{const a=sf.odeme===o;return(
         <button key={o} onClick={()=>setSf({...sf,odeme:o})} className="rounded-lg px-3 py-2 text-sm font-medium" style={{background:a?C.ink:"transparent",color:a?"#fff":C.inkSoft,border:`1px solid ${a?C.ink:C.hair}`}}>{o}</button>);})}</div></div>
     </div>
-    <div className="text-sm tabular-nums mt-2" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(parse(sf.adet)*N(urun.satis))}</b></div>
+    <div className="text-sm tabular-nums mt-2" style={{color:C.inkSoft}}>Tutar: <b style={{color:C.ink}}>{tl(parse(sf.adet)*birimTL)}</b>{sf.pb!=="TL"&&birimTL>0?` · birim ≈ ${tl(birimTL)}`:""}</div>
     {mesaj&&<p className="text-sm mt-2" style={{color:mesaj.startsWith("\u2713")?C.gelir:C.gider}}>{mesaj}</p>}
     <div className="flex justify-end gap-2 mt-3">
       <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Kapat</button>
