@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v42"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v43"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -517,7 +517,7 @@ function Urunler({products,stokDeger,kur,A,canDelete}){
         <div className="mt-3 text-sm" style={{color:C.inkSoft}}>{buyuk.kod}{buyuk.renk?` \u00b7 ${buyuk.renk}`:""} \u00b7 stok {sayi(buyuk.stok)} {buyuk.birim} \u00b7 <b style={{color:C.gelir}}>{tl(buyuk.satis)}</b></div>
       </Modal>)}
       {etiketAc&&(<Modal title="QR Etiket Yazdır" onClose={()=>setEtiketAc(false)}>
-        <p className="text-sm mb-3" style={{color:C.inkSoft}}>Etiketini basmak istediğin ürünleri seç, kaç adet basılacağını yaz. Her etikette QR kod, ürün adı, kod/renk ve fiyat olur.</p>
+        <p className="text-sm mb-3" style={{color:C.inkSoft}}>Etiketini basmak istediğin ürünleri seç, kaç adet basılacağını yaz. Her etikette QR kod, ürün adı ve kod/renk olur (fiyat yazılmaz).</p>
         <div className="flex gap-2 mb-3">
           <button onClick={()=>setSec(Object.fromEntries(products.map(p=>[p.id,"1"])))} className="rounded-lg px-3 py-1.5 text-xs font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Tümünü seç</button>
           <button onClick={()=>setSec({})} className="rounded-lg px-3 py-1.5 text-xs font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Temizle</button>
@@ -1143,7 +1143,6 @@ async function etiketYazdir(liste){ // liste: [{urun, adet}]
       <div class="bilgi">
         <div class="ad">${esc(urun.ad)}</div>
         <div class="satir">${esc(urun.kod||"")}${urun.renk?` · ${esc(urun.renk)}`:""}</div>
-        <div class="fiyat">${esc(tl(urun.satis))}</div>
       </div></div>`);
   }
   const html=`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Ürün Etiketleri</title><style>
