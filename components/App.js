@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus, Trash2, Search, Boxes, ShoppingCart, Users, Truck, Scissors, LayoutDashboard,
   AlertTriangle, TrendingUp, X, Receipt, Coins, ArrowUpRight, ArrowDownRight, ScrollText,
-  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound, ArrowRightLeft, ClipboardList, Wallet, Printer, QrCode, Tag, Image as ImageIcon,
+  CalendarClock, LogOut, Loader2, RefreshCw, DollarSign, Euro, Pencil, Check, Phone, MapPin, ShieldCheck, UserCog, KeyRound, ArrowRightLeft, ClipboardList, Wallet, Printer, QrCode, Tag, Image as ImageIcon, ShoppingBag,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as db from "@/lib/db";
@@ -11,7 +11,7 @@ import * as db from "@/lib/db";
 const C = { paper:"#F4F4F5", surface:"#FFFFFF", ink:"#131417", inkSoft:"#71727A", hair:"#E6E7EA",
   gelir:"#0F7B57", gelirBg:"#E6F4EE", gider:"#C0392B", giderBg:"#FBEBE9", gold:"#8A6D3B", goldBg:"#F3ECDA" };
 // Sekme/kart canlı renkleri (rengârenk ama rafine mücevher tonları)
-const RENK = { ozet:"#4338CA", satis:"#047857", urun:"#B45309", musteri:"#0369A1", siparis:"#6D28D9", kumasci:"#BE123C", ted:"#0F766E", cek:"#BE185D", gider:"#C2410C", kullanicilar:"#475569" };
+const RENK = { ozet:"#4338CA", satis:"#047857", urun:"#B45309", musteri:"#0369A1", siparis:"#6D28D9", kumasci:"#BE123C", ted:"#0F766E", cek:"#BE185D", gider:"#C2410C", kullanicilar:"#475569", shopier:"#7C3AED" };
 const N=(x)=>Number(x)||0;
 const tl=(n)=>new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",maximumFractionDigits:0}).format(N(n));
 const sayi=(n)=>new Intl.NumberFormat("tr-TR").format(N(n));
@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v46"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v47"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -136,7 +136,8 @@ export default function App({ session }) {
   const canDelete = rol==="admin";
   const giderler=[...cash].filter(c=>c.kategori==="gider"||(c.tip==="cikis"&&String(c.aciklama||"").startsWith("[Gider]"))).sort((a,b)=>((a.tarih||a.created_at)<(b.tarih||b.created_at)?1:-1));
   const toplamGider=giderler.reduce((a,b)=>a+N(b.amount),0);
-  const acikSiparis=orders.filter(o=>o.durum!=="Teslim Edildi"&&o.durum!=="İptal").length;
+  const acikSiparis=orders.filter(o=>o.kaynak!=="shopier"&&o.durum!=="Teslim Edildi"&&o.durum!=="İptal").length;
+  const shopierYeni=orders.filter(o=>o.kaynak==="shopier"&&o.durum!=="Teslim Edildi"&&o.durum!=="İptal"&&o.durum!=="İade").length;
   const stokDeger=products.reduce((a,b)=>a+N(b.stok)*N(b.giris),0);
   const kritik=products.filter(kritikMi).length;
   const toplamSatis=sales.reduce((a,b)=>a+N(b.tutar),0);
@@ -172,12 +173,13 @@ export default function App({ session }) {
     {k:"urun",l:"Ürünler",I:Boxes},
     {k:"musteri",l:"Müşteriler",I:Users},
     {k:"siparis",l:"Siparişler",I:ClipboardList},
+    {k:"shopier",l:"Shopier",I:ShoppingBag},
     {k:"kumasci",l:"Kumaşçılar",I:Truck},
     {k:"ted",l:"Tedarikçiler",I:Scissors},
     {k:"cek",l:"Çek / Senet",I:ScrollText},
     {k:"gider",l:"Gider",I:Wallet},
   ];
-  let SEKMELER = rol==="tedarik" ? TUM.filter(s=>s.k==="siparis"||s.k==="kumasci"||s.k==="ted"||s.k==="cek") : [...TUM];
+  let SEKMELER = rol==="tedarik" ? TUM.filter(s=>s.k==="siparis"||s.k==="shopier"||s.k==="kumasci"||s.k==="ted"||s.k==="cek") : [...TUM];
   if(rol==="admin") SEKMELER=[...SEKMELER,{k:"kullanicilar",l:"Kullanıcılar",I:UserCog}];
   const aktif = SEKMELER.some(s=>s.k===sekme) ? sekme : SEKMELER[0].k;
 
@@ -210,7 +212,7 @@ export default function App({ session }) {
           {SEKMELER.map(({k,l,I})=>{const rc=RENK[k]||C.ink; const a=aktif===k; return(
             <button key={k} onClick={()=>setSekme(k)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-all"
               style={{background:a?rc:rc+"14",color:a?"#fff":rc,border:`1px solid ${a?rc:rc+"33"}`}}>
-              <I size={15} color={a?"#fff":rc}/> {l}{k==="urun"&&kritik>0&&<span className="ml-1 text-xs px-1.5 rounded-full" style={{background:a?"#ffffff33":C.giderBg,color:a?"#fff":C.gider}}>{kritik}</span>}{k==="siparis"&&acikSiparis>0&&<span className="ml-1 text-xs px-1.5 rounded-full" style={{background:a?"#ffffff33":C.goldBg,color:a?"#fff":C.gold}}>{acikSiparis}</span>}
+              <I size={15} color={a?"#fff":rc}/> {l}{k==="urun"&&kritik>0&&<span className="ml-1 text-xs px-1.5 rounded-full" style={{background:a?"#ffffff33":C.giderBg,color:a?"#fff":C.gider}}>{kritik}</span>}{k==="siparis"&&acikSiparis>0&&<span className="ml-1 text-xs px-1.5 rounded-full" style={{background:a?"#ffffff33":C.goldBg,color:a?"#fff":C.gold}}>{acikSiparis}</span>}{k==="shopier"&&shopierYeni>0&&<span className="ml-1 text-xs px-1.5 rounded-full" style={{background:a?"#ffffff33":RENK.shopier+"22",color:a?"#fff":RENK.shopier}}>{shopierYeni}</span>}
             </button>);})}
         </div>
 
@@ -218,7 +220,8 @@ export default function App({ session }) {
         {aktif==="satis" && <Satis {...{products,customers,sales,kur,A,canDelete}}/>}
         {aktif==="urun" && <Urunler {...{products,stokDeger,kur,A,canDelete}}/>}
         {aktif==="musteri" && <Musteriler {...{customers,sales,collections,orders,products,musteriAlacak,kur,A,canDelete}}/>}
-        {aktif==="siparis" && <Siparisler {...{orders,customers,kur,A,canDelete,rol}}/>}
+        {aktif==="siparis" && <Siparisler orders={orders.filter(o=>o.kaynak!=="shopier")} {...{customers,kur,A,canDelete,rol}}/>}
+        {aktif==="shopier" && <ShopierSiparisler orders={orders.filter(o=>o.kaynak==="shopier")} {...{kur,A,canDelete}}/>}
         {aktif==="kumasci" && <SupplierScreen grup="kumasci" toplam={kumasciBorc} kur={kur} {...{suppliers,supplierMov,A,canDelete}}/>}
         {aktif==="ted" && <SupplierScreen grup="tedarikci" toplam={tedarikciBorc} kur={kur} {...{suppliers,supplierMov,A,canDelete}}/>}
         {aktif==="cek" && <CekSenet {...{cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDelete}}/>}
@@ -1077,6 +1080,42 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
           <button onClick={duzKaydet} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Güncelle</button>
         </div>
       </Modal>)}
+    </div>
+  );
+}
+
+// === SHOPIER SİPARİŞLERİ ====================================================
+function ShopierSiparisler({orders=[],kur,A,canDelete}){
+  const DURUMLAR=["Bekliyor","Hazırlanıyor","Hazır","Kargolandı","Teslim Edildi","İade","İptal"];
+  const dRenk=(d)=>d==="Teslim Edildi"?C.gelir:d==="İade"||d==="İptal"?C.gider:d==="Hazır"||d==="Kargolandı"?C.gelir:C.gold;
+  const dBg=(d)=>d==="Teslim Edildi"?C.gelirBg:d==="İade"||d==="İptal"?C.giderBg:d==="Hazır"||d==="Kargolandı"?C.gelirBg:C.goldBg;
+  const [filtre,setFiltre]=useState("hepsi");
+  const goster=[...orders].filter(o=>filtre==="hepsi"?true:filtre==="iade"?(o.durum==="İade"||o.durum==="İptal"):o.durum===filtre).sort((a,b)=>((a.created_at||a.tarih)<(b.created_at||b.tarih)?1:-1));
+  const gecerli=orders.filter(o=>o.durum!=="İade"&&o.durum!=="İptal");
+  const ciro=gecerli.reduce((a,b)=>a+N(b.toplam),0);
+  const iadeTop=orders.filter(o=>o.durum==="İade"||o.durum==="İptal").reduce((a,b)=>a+N(b.toplam),0);
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Ozetcik etiket="Shopier Cirosu (net)" deger={tl(ciro)} dov={dov(ciro,kur)} renk={RENK.shopier} alt={`${gecerli.length} sipariş`}/>
+        {iadeTop>0&&<Ozetcik etiket="İade / İptal" deger={tl(iadeTop)} dov={dov(iadeTop,kur)} renk={C.gider} alt={`${orders.length-gecerli.length} adet`}/>}
+      </div>
+      <div className="rounded-lg p-3 text-xs" style={{background:RENK.shopier+"14",color:RENK.shopier}}>
+        Bu siparişler Shopier'den otomatik düşer. Shopier'de para tahsil edildiği için kasaya <b>otomatik eklenmez</b> (çift sayımı önlemek için). Bir sipariş iade/iptal olursa durumu <b>"İade"</b> ya da <b>"İptal"</b> yap; net ciro ve iade toplamı buna göre güncellenir.
+      </div>
+      <div className="flex gap-1.5 flex-wrap">{[["hepsi","Hepsi"],["Bekliyor","Bekliyor"],["Hazırlanıyor","Hazırlanıyor"],["Hazır","Hazır"],["Kargolandı","Kargolandı"],["Teslim Edildi","Teslim"],["iade","İade/İptal"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setFiltre(k)} className="rounded-lg px-3 py-1.5 text-xs font-medium" style={{background:filtre===k?C.ink:"transparent",color:filtre===k?"#fff":C.inkSoft,border:`1px solid ${filtre===k?C.ink:C.hair}`}}>{l}</button>))}</div>
+      <Tablo><thead><Tr head><Th>Sipariş</Th><Th>Müşteri</Th><Th r>Tutar</Th><Th>Durum</Th><Th></Th></Tr></thead><tbody>
+        {goster.map(o=>(
+          <Tr key={o.id}>
+            <Td><div className="font-medium whitespace-pre-line flex items-center gap-2"><span className="text-xs px-1.5 py-0.5 rounded" style={{background:RENK.shopier+"1A",color:RENK.shopier}}>Shopier</span>{o.aciklama||"Sipariş"}</div><div className="text-xs" style={{color:C.inkSoft}}>{fTarih(o.tarih)}{o.notu?` · ${o.notu}`:""}</div></Td>
+            <Td><span style={{color:C.inkSoft}}>{o.musteri_ad||"—"}</span></Td>
+            <Td r mono><div className="font-semibold">{tl(o.toplam)}</div><div className="text-xs font-normal tabular-nums" style={{color:C.inkSoft}}>{dov(N(o.toplam),kur)}</div></Td>
+            <Td><select value={o.durum} onChange={e=>A.updateOrder(o.id,{durum:e.target.value})} className="rounded px-2 py-1 text-xs font-medium outline-none" style={{background:dBg(o.durum),color:dRenk(o.durum),border:"none"}}>{DURUMLAR.map(d=><option key={d}>{d}</option>)}</select></Td>
+            <Td>{canDelete&&<SilBtn onClick={()=>A.deleteOrder(o.id)}/>}</Td>
+          </Tr>))}
+        {goster.length===0&&<Tr><Td><span style={{color:C.inkSoft}}>Shopier siparişi yok. Shopier'den sipariş geldikçe burada listelenir.</span></Td></Tr>}
+      </tbody></Tablo>
     </div>
   );
 }
