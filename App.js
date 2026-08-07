@@ -1,57 +1,42 @@
-"use client";
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { ShoppingCart, Loader2 } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
 
-const C = { paper: "#FAF8F3", surface: "#FFFFFF", ink: "#16161D", inkSoft: "#5C5B66", hair: "#E8E2D6", gelir: "#18794E", gider: "#B42318", gold: "#9C7A2E" };
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export default function Login() {
-  const [email, setEmail] = useState("");
-  const [sifre, setSifre] = useState("");
-  const [hata, setHata] = useState("");
-  const [yukleniyor, setYukleniyor] = useState(false);
+// Admin, başka bir kullanıcının şifresini değiştirir.
+// Secret key SADECE burada (sunucuda) kullanılır; tarayıcıya asla gitmez.
+export async function POST(req) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secret = process.env.SUPABASE_SECRET_KEY; // sb_secret_... veya legacy service_role
+  if (!url || !secret) {
+    return NextResponse.json({ error: "Sunucu yapılandırması eksik: SUPABASE_SECRET_KEY tanımlı değil." }, { status: 500 });
+  }
 
-  const girisYap = async () => {
-    setHata(""); setYukleniyor(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password: sifre });
-      if (error) throw error;
-    } catch (e) {
-      setHata(e.message || "Giriş yapılamadı");
-    } finally {
-      setYukleniyor(false);
-    }
-  };
+  const token = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
+  if (!token) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-5" style={{ background: C.paper, color: C.ink }}>
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-6">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl mb-3" style={{ background: C.ink }}>
-            <ShoppingCart size={26} color={C.paper} />
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight" style={{ fontFamily: "Georgia, serif" }}>Muslihan Tekstil</h1>
-          <p className="text-sm" style={{ color: C.inkSoft }}>Mağaza takip sistemi</p>
-        </div>
+  const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
 
-        <div className="rounded-2xl border p-6 shadow-sm" style={{ background: C.surface, borderColor: C.hair }}>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: C.inkSoft }}>E-posta</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email"
-            className="w-full mb-3 rounded-lg px-3 py-2.5 text-sm outline-none" style={{ border: `1px solid ${C.hair}`, background: C.paper }} />
-          <label className="block text-xs font-medium mb-1.5" style={{ color: C.inkSoft }}>Şifre</label>
-          <input value={sifre} onChange={(e) => setSifre(e.target.value)} type="password" autoComplete="current-password"
-            onKeyDown={(e) => e.key === "Enter" && girisYap()}
-            className="w-full mb-4 rounded-lg px-3 py-2.5 text-sm outline-none" style={{ border: `1px solid ${C.hair}`, background: C.paper }} />
+  // 1) Çağıranı doğrula
+  const { data: caller, error: cErr } = await admin.auth.getUser(token);
+  if (cErr || !caller?.user) return NextResponse.json({ error: "Oturum geçersiz." }, { status: 401 });
 
-          {hata && <p className="text-sm mb-3" style={{ color: C.gider }}>{hata}</p>}
+  // 2) Çağıran admin mi?
+  const { data: prof } = await admin.from("profiles").select("role").eq("id", caller.user.id).single();
+  if (prof?.role !== "admin") {
+    return NextResponse.json({ error: "Bu işlem için yönetici olmalısınız." }, { status: 403 });
+  }
 
-          <button onClick={girisYap} disabled={yukleniyor || !email || !sifre}
-            className="w-full flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-white disabled:opacity-50" style={{ background: C.ink }}>
-            {yukleniyor && <Loader2 size={16} className="animate-spin" />}
-            Giriş Yap
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  // 3) Girdileri doğrula
+  const { userId, password } = await req.json().catch(() => ({}));
+  if (!userId || !password || String(password).length < 6) {
+    return NextResponse.json({ error: "Geçerli kullanıcı ve en az 6 haneli şifre gerekli." }, { status: 400 });
+  }
+
+  // 4) Şifreyi güncelle
+  const { error } = await admin.auth.admin.updateUserById(userId, { password });
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  return NextResponse.json({ ok: true });
 }
