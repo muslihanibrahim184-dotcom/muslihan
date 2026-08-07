@@ -55,8 +55,17 @@ function imzaDogru(payload, hash, user, pass) {
 }
 
 export async function GET() {
-  // Sağlık kontrolü / URL doğru mu diye tarayıcıdan bakılırsa
-  return new Response("Shopier OSB endpoint hazır. Shopier bu adrese POST atmalı.", { status: 200 });
+  const durum = {
+    SHOPIER_OSB_USER: process.env.SHOPIER_OSB_USER ? "tanımlı ✓" : "TANIMSIZ ✗",
+    SHOPIER_OSB_PASS: process.env.SHOPIER_OSB_PASS ? "tanımlı ✓" : "TANIMSIZ ✗",
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY ? "tanımlı ✓" : "TANIMSIZ ✗",
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? "tanımlı ✓" : "TANIMSIZ ✗",
+    SHOPIER_DEBUG: String(process.env.SHOPIER_DEBUG || "") === "1" ? "AÇIK" : "kapalı",
+  };
+  const metin = "Shopier OSB endpoint hazır.\n\nYapılandırma:\n" +
+    Object.entries(durum).map(([k, v]) => `  ${k}: ${v}`).join("\n") +
+    "\n\nHepsi 'tanımlı ✓' olmalı. 'TANIMSIZ ✗' varsa Vercel'de o değişkeni copluk projesine ekle.";
+  return new Response(metin, { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
 export async function POST(req) {
@@ -64,31 +73,38 @@ export async function POST(req) {
   const PASS = process.env.SHOPIER_OSB_PASS;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;
+  const DEBUG = String(process.env.SHOPIER_DEBUG || "") === "1";
 
   if (!USER || !PASS) return new Response("Sunucu yapılandırması eksik: SHOPIER_OSB_USER/PASS tanımlı değil.", { status: 500 });
 
   const ctype = req.headers.get("content-type") || "";
   const raw = await req.text();
-  const { payload, hash } = ciftBul(raw, ctype);
+  const { payload, hash, degerler } = ciftBul(raw, ctype);
+  const dogru = imzaDogru(payload, hash, USER, PASS);
 
-  if (!imzaDogru(payload, hash, USER, PASS)) {
+  // Teşhis logu (Vercel → Functions loglarında görünür)
+  console.log("SHOPIER OSB", JSON.stringify({
+    ctype, uzunluk: raw.length, degerSayisi: degerler.length,
+    payloadVar: !!payload, hashVar: !!hash, imzaDogru: dogru,
+  }));
+
+  if (!dogru && !DEBUG) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   const o = b64Json(payload) || {};
   const test = o.istest === true || o.istest === "true" || o.istest === 1 || o.istest === "1";
 
-  // Veritabanına yaz (servis anahtarı ile — RLS'i aşar)
   if (url && secret) {
     try {
       const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
-      const ad = `${o.buyername || ""} ${o.buyersurname || ""}`.trim() || "Shopier müşteri";
-      const aciklama = String(o.productlist || o.productid || (o.productcount ? `${o.productcount} ürün` : "Shopier sipariş")).slice(0, 2000);
+      const ad = `${o.buyername || ""} ${o.buyersurname || ""}`.trim() || (dogru ? "Shopier müşteri" : "Shopier (DOĞRULANMADI)");
+      const aciklama = String(o.productlist || o.productid || (o.productcount ? `${o.productcount} ürün` : (dogru ? "Shopier sipariş" : `DEBUG: payload=${!!payload} hash=${!!hash} değer=${degerler.length}`))).slice(0, 2000);
       const parcalar = [
-        "Shopier" + (test ? " (TEST)" : ""),
+        "Shopier" + (test ? " (TEST)" : "") + (dogru ? "" : " · DOĞRULANMADI"),
         o.orderid ? `sipariş ${o.orderid}` : "",
         o.email || "",
-        o.currency && String(o.currency).toUpperCase() !== "TL" && String(o.currency).toUpperCase() !== "TRY" ? `${o.price} ${o.currency}` : "",
+        o.currency && !["TL", "TRY"].includes(String(o.currency).toUpperCase()) ? `${o.price} ${o.currency}` : "",
         o.customernote ? `not: ${o.customernote}` : "",
       ].filter(Boolean);
       const bugun = new Date().toISOString().slice(0, 10);
@@ -98,15 +114,13 @@ export async function POST(req) {
         aciklama,
         toplam: Number(o.price) || 0,
         kapora: 0,
-        durum: test ? "Bekliyor" : "Bekliyor",
+        durum: "Bekliyor",
         notu: parcalar.join(" · "),
         tarih: bugun,
         kaynak: "shopier",
-        shopier_id: o.orderid ? String(o.orderid) : null,
+        shopier_id: o.orderid ? String(o.orderid) : (dogru ? null : `debug-${Date.now()}`),
       }, { onConflict: "shopier_id", ignoreDuplicates: true });
     } catch (e) {
-      // Yazma hatasında bile Shopier'e success dönmek gerekir ki tekrar denesin diye takılmasın;
-      // ama imza doğru olduğu için burada sadece logluyoruz.
       console.error("Shopier order insert error:", e?.message || e);
     }
   }
