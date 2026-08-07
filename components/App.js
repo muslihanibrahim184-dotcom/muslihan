@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v43"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v44"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -1043,7 +1043,7 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
         {goster.map(o=>{const gec=o.teslim&&o.teslim<TODAY&&o.durum!=="Teslim Edildi"&&o.durum!=="İptal"; return(
           <Tr key={o.id}>
             <Td><button onClick={()=>duzAc(o)} className="text-left w-full group/d" title="Düzenlemek için tıkla">
-              <div className="font-medium whitespace-pre-line group-hover/d:underline">{o.aciklama||"Sipariş"}</div>
+              <div className="font-medium whitespace-pre-line group-hover/d:underline flex items-center gap-2">{o.aciklama||"Sipariş"}{o.kaynak==="shopier"&&<span className="text-xs px-1.5 py-0.5 rounded" style={{background:RENK.siparis+"1A",color:RENK.siparis}}>Shopier</span>}</div>
               <div className="text-xs" style={{color:gec?C.gider:C.inkSoft}}>{fTarih(o.tarih)}{o.teslim?` · teslim ${fTarih(o.teslim)}${gec?" (geçti)":""}`:""}{o.notu?` · ${o.notu}`:""} · <span style={{color:RENK.siparis}}>düzenle</span></div>
             </button></Td>
             <Td><span style={{color:C.inkSoft}}>{o.musteri_ad||"—"}</span></Td>

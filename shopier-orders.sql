@@ -1,25 +1,14 @@
 -- ============================================================
--- Çek/Senet'i tedarik rolüne açar.
--- Supabase > SQL Editor'da TAMAMINI seçip Run'a basın.
--- Veri silinmez; sadece çek tablosunun yetki kuralları güncellenir.
--- NOT: Mevcut user_role() fonksiyonuna DOKUNULMAZ (zaten çalışıyor).
+--  Muslihan Tekstil - Shopier siparis entegrasyonu
+--  Supabase -> SQL Editor'da BIR KEZ calistir.
 -- ============================================================
 
-alter table public.cheques enable row level security;
+-- Siparise kaynak + Shopier siparis kimligi (tekrari onlemek icin)
+alter table public.orders add column if not exists kaynak text default 'manuel';
+alter table public.orders add column if not exists shopier_id text;
 
-drop policy if exists sel on public.cheques;
-drop policy if exists ins on public.cheques;
-drop policy if exists upd on public.cheques;
-drop policy if exists del on public.cheques;
+-- Ayni Shopier siparisi iki kez gelirse kopya olusmasin
+create unique index if not exists orders_shopier_id_uniq
+  on public.orders(shopier_id) where shopier_id is not null;
 
-create policy sel on public.cheques for select to authenticated
-  using (public.user_role() in ('admin','editor','tedarik'));
-
-create policy ins on public.cheques for insert to authenticated
-  with check (public.user_role() in ('admin','editor','tedarik'));
-
-create policy upd on public.cheques for update to authenticated
-  using (public.user_role() in ('admin','editor','tedarik'));
-
-create policy del on public.cheques for delete to authenticated
-  using (public.user_role() = 'admin');
+notify pgrst, 'reload schema';
