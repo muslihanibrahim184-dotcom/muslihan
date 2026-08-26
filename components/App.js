@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v48"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v49"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -154,6 +154,12 @@ export default function App({ session }) {
       if(adet<=0) return "Adet girin"; if(adet>N(urun.stok)) return `Stok yetersiz (mevcut ${N(urun.stok)})`;
       if(["veresiye","çek","senet"].includes(String(odeme).toLowerCase())&&!musteriId) return "Bu ödeme türü için müşteri seçin";
       const musteri=customers.find(m=>m.id===musteriId)||null; await run(()=>db.recordSale({urun,adet,musteri,odeme,birimFiyat,tarih})); return null; },
+    saleBatch:async({items,musteriId,odeme,tarih})=>{ if(!items||!items.length) return "Sepet boş";
+      const cozulmus=[]; for(const it of items){ const urun=products.find(p=>p.id===it.urunId); if(!urun) return "Ürün bulunamadı";
+        if(it.adet<=0) return `${urun.ad}: adet girin`; if(it.adet>N(urun.stok)) return `${urun.ad}: stok yetersiz (mevcut ${N(urun.stok)})`;
+        cozulmus.push({urun,adet:it.adet,birimFiyat:it.birimFiyat}); }
+      if(["veresiye","çek","senet"].includes(String(odeme).toLowerCase())&&!musteriId) return "Bu ödeme türü için müşteri seçin";
+      const musteri=customers.find(m=>m.id===musteriId)||null; await run(()=>db.recordSaleBatch({items:cozulmus,musteri,odeme,tarih})); return null; },
     deleteSale:(s)=>run(()=>db.deleteSale(s,products,customers)),
     addProduct:(p)=>run(()=>db.addProduct(p)), updateProduct:(id,patch)=>run(()=>db.updateProduct(id,patch)), deleteProduct:(id)=>run(()=>db.deleteProduct(id)),
     addCustomer:(c)=>run(()=>db.addCustomer(c)), updateCustomer:(id,patch)=>run(()=>db.updateCustomer(id,patch)), deleteCustomer:(id)=>run(()=>db.deleteCustomer(id)),
@@ -350,6 +356,7 @@ function Ozet({stokDeger,kritik,kasaBakiye,toplamSatis,toplamKar,musteriAlacak,k
 // === SATIŞ ==================================================================
 function Satis({products,customers,sales,kur,A,canDelete}){
   const [f,setF]=useState({urunId:"",adet:"",fiyat:"",pb:"TL",musteriId:"",odeme:"Nakit",tarih:TODAY}); const [hata,setHata]=useState("");
+  const [sepet,setSepet]=useState([]); // [{urunId, ad, adet, birimTL}]
   const [yeniAc,setYeniAc]=useState(false); const [yeniM,setYeniM]=useState({ad:"",telefon:"",adres:""});
   const toTr=(n)=>String(Math.round(n*100)/100).replace(".",",");
   const pb=f.pb||"TL"; const sym={TL:"₺",USD:"$",EUR:"€"};
@@ -368,7 +375,19 @@ function Satis({products,customers,sales,kur,A,canDelete}){
     const tlv = pb==="USD" ? v*kur.usd : pb==="EUR" ? v*kur.eur : v;
     const yeni = yeniPb==="USD" ? tlv/kur.usd : yeniPb==="EUR" ? tlv/kur.eur : tlv;
     setF({...f,pb:yeniPb,fiyat:fmtInput(toTr(yeni))}); };
-  const yap=async()=>{ const r=await A.sale({urunId:f.urunId,adet,musteriId:f.musteriId||null,odeme:f.odeme,birimFiyat:birim,tarih:f.tarih}); if(r){setHata(r);return;} setHata(""); setF({urunId:"",adet:"",fiyat:"",pb:f.pb,musteriId:"",odeme:f.odeme,tarih:f.tarih}); };
+  const sepeteEkle=()=>{ if(!u){setHata("Ürün seçin");return;} if(adet<=0){setHata("Adet girin");return;}
+    const stokVar=N(u.stok); const mevcut=sepet.find(x=>x.urunId===u.id); const toplamAdet=(mevcut?mevcut.adet:0)+adet;
+    if(toplamAdet>stokVar){setHata(`${u.ad}: stok yetersiz (mevcut ${sayi(stokVar)})`);return;}
+    setSepet(mevcut? sepet.map(x=>x.urunId===u.id?{...x,adet:toplamAdet,birimTL:birim}:x) : [...sepet,{urunId:u.id,ad:u.ad,adet,birimTL:birim}]);
+    setHata(""); setF({...f,urunId:"",adet:"",fiyat:""}); };
+  const sepetTutar=sepet.reduce((a,x)=>a+x.adet*x.birimTL,0);
+  const yap=async()=>{
+    // Sepet doluysa toplu sat; boşsa ekrandaki tek ürünü sat
+    const items = sepet.length ? sepet.map(x=>({urunId:x.urunId,adet:x.adet,birimFiyat:x.birimTL}))
+                              : (u&&adet>0 ? [{urunId:u.id,adet,birimFiyat:birim}] : []);
+    if(!items.length){setHata("Ürün seçin veya sepete ekleyin");return;}
+    const r=await A.saleBatch({items,musteriId:f.musteriId||null,odeme:f.odeme,tarih:f.tarih});
+    if(r){setHata(r);return;} setHata(""); setSepet([]); setF({urunId:"",adet:"",fiyat:"",pb:f.pb,musteriId:"",odeme:f.odeme,tarih:f.tarih}); };
   const yeniMusteri=async()=>{ if(!yeniM.ad.trim())return; const m=await A.addCustomer({ad:yeniM.ad.trim(),telefon:yeniM.telefon.trim(),adres:yeniM.adres.trim(),vergi_no:"",notu:"",bakiye:0}); if(m){ setF(s=>({...s,musteriId:m.id})); setYeniAc(false); setYeniM({ad:"",telefon:"",adres:""}); } };
   const liste=[...sales].sort((a,b)=>(a.tarih<b.tarih?1:-1));
   return (
@@ -402,6 +421,16 @@ function Satis({products,customers,sales,kur,A,canDelete}){
           <Inp label="Adres (ops.)" v={yeniM.adres} set={v=>setYeniM({...yeniM,adres:v})} cls="flex-1 min-w-[200px]"/>
           <button onClick={yeniMusteri} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.ink}}>Müşteri Ekle & Seç</button>
         </div>)}
+        {sepet.length>0&&(<div className="mt-3 rounded-lg border overflow-hidden" style={{borderColor:RENK.satis}}>
+          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider flex items-center justify-between" style={{background:RENK.satis+"14",color:RENK.satis}}>
+            <span>Sepet · {sepet.length} kalem</span><span className="tabular-nums">Toplam {tl(sepetTutar)} · {dov(sepetTutar,kur)}</span></div>
+          {sepet.map((x,i)=>(<div key={x.urunId} className="flex items-center gap-2 px-3 py-2 border-t text-sm" style={{borderColor:C.hair}}>
+            <span className="flex-1 min-w-0 truncate font-medium">{x.ad}</span>
+            <span className="tabular-nums" style={{color:C.inkSoft}}>{sayi(x.adet)} × {tl(x.birimTL)}</span>
+            <span className="w-24 text-right tabular-nums font-semibold">{tl(x.adet*x.birimTL)}</span>
+            <button onClick={()=>setSepet(sepet.filter((_,j)=>j!==i))} className="p-1" title="Çıkar"><Trash2 size={14} color={C.gider}/></button>
+          </div>))}
+        </div>)}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
           <div className="flex items-center gap-4">
             {onizleme&&adet>0&&<>
@@ -410,7 +439,10 @@ function Satis({products,customers,sales,kur,A,canDelete}){
               <span className="text-sm" style={{color:C.inkSoft}}>Kâr: <b style={{color:onizleme.kar>=0?C.gelir:C.gider}}>{tl(onizleme.kar)}</b></span></>}
             {hata&&<span className="text-sm font-medium" style={{color:C.gider}}>{hata}</span>}
           </div>
-          <button onClick={yap} className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white" style={{background:C.gelir}}><Plus size={16}/> Satışı Kaydet</button>
+          <div className="flex items-center gap-2">
+            <button onClick={sepeteEkle} className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold" style={{border:`1px solid ${RENK.satis}`,color:RENK.satis}}><Plus size={16}/> Sepete Ekle</button>
+            <button onClick={yap} className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white" style={{background:C.gelir}}><Receipt size={16}/> {sepet.length?`Sepeti Sat (${tl(sepetTutar)})`:"Satışı Kaydet"}</button>
+          </div>
         </div>
       </div>
       <Tablo><thead><Tr head><Th>Tarih</Th><Th>Ürün / Müşteri</Th><Th r>Adet</Th><Th r>Tutar</Th><Th r>Kâr</Th><Th>Ödeme</Th><Th></Th></Tr></thead><tbody>
