@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v47"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v48"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -1002,6 +1002,14 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
     const cev=(v)=> v>0 ? fmtInput(toTr((v*carpan(eski))/carpan(yeni))) : "";
     setF({...f,pb:yeni,toplam:t>0?cev(t):f.toplam,kapora:k>0?cev(k):f.kapora}); };
   const [filtre,setFiltre]=useState("acik");
+  const [kalem,setKalem]=useState([]);
+  const sym={TL:"₺",USD:"$",EUR:"€"};
+  const kalemToplam=kalem.reduce((a,k)=>a+parse(k.adet)*parse(k.fiyat),0);
+  const kalemUygula=()=>{ if(!kalem.length) return;
+    const satirlar=kalem.filter(k=>k.ad.trim()||parse(k.adet)>0).map(k=>{const a=parse(k.adet),fi=parse(k.fiyat); const ad=k.ad.trim()||"kalem"; return a>0&&fi>0?`${ad}: ${sayi(a)} × ${sym[f.pb]}${sayi(fi)} = ${sym[f.pb]}${sayi(a*fi)}`:(a>0?`${ad}: ${sayi(a)} adet`:ad);}).join("\n");
+    const yeniAcik=f.aciklama.trim()?`${f.aciklama.trim()}\n${satirlar}`:satirlar;
+    setF({...f,aciklama:yeniAcik,toplam:fmtInput(String(Math.round(kalemToplam*100)/100).replace(".",","))});
+    setKalem([]); };
   const [duz,setDuz]=useState(null);
   const duzAc=(o)=>setDuz({id:o.id,musteriId:o.musteri_id||"",aciklama:o.aciklama||"",toplam:fmtInput(toTr(N(o.toplam))),kapora:fmtInput(toTr(N(o.kapora))),pb:"TL",notu:o.notu||"",teslim:o.teslim||"",durum:o.durum||"Bekliyor"});
   const duzPbDegis=(yeni)=>{ const eski=duz.pb||"TL"; const t=parse(duz.toplam), k=parse(duz.kapora);
@@ -1015,7 +1023,7 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
     const m=customers.find(x=>x.id===f.musteriId)||null;
     const not=f.pb!=="TL" ? `${f.notu.trim()?f.notu.trim()+" · ":""}${{USD:"$",EUR:"€"}[f.pb]}${f.toplam} sipariş` : f.notu.trim();
     await A.addOrder({musteri_id:m?.id||null,musteri_ad:m?.ad||"",aciklama:f.aciklama.trim(),toplam,kapora,notu:not,teslim:f.teslim||null,tarih:TODAY});
-    setF({musteriId:f.musteriId,aciklama:"",toplam:"",kapora:"",pb:f.pb,notu:"",teslim:""}); setAc(false); };
+    setF({musteriId:f.musteriId,aciklama:"",toplam:"",kapora:"",pb:f.pb,notu:"",teslim:""}); setKalem([]); setAc(false); };
   const goster=[...orders].filter(o=>filtre==="hepsi"?true:filtre==="acik"?(o.durum!=="Teslim Edildi"&&o.durum!=="İptal"):o.durum===filtre).sort((a,b)=>((a.teslim||a.tarih)>(b.teslim||b.tarih)?1:-1));
   const acikTutar=orders.filter(o=>o.durum!=="Teslim Edildi"&&o.durum!=="İptal").reduce((a,b)=>a+(N(b.toplam)-N(b.kapora)),0);
   return (
@@ -1028,6 +1036,24 @@ function Siparisler({orders=[],customers,kur,A,canDelete,rol}){
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="col-span-2"><Lbl>Müşteri</Lbl><select value={f.musteriId} onChange={e=>setF({...f,musteriId:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}><option value="">Seçin (ops.)…</option>{customers.map(c=><option key={c.id} value={c.id}>{c.ad}</option>)}</select></div>
           <div className="col-span-2"><Lbl>Açıklama (her satıra bir kalem)</Lbl><textarea value={f.aciklama} onChange={e=>setF({...f,aciklama:e.target.value})} rows={3} placeholder={"ör.\n500 adet dalgıç takım kırmızı/siyah/mavi\n500 tişört\n500 kapri"} className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div className="col-span-2 md:col-span-4 rounded-lg border p-3" style={{borderColor:C.hair,background:C.paper}}>
+            <div className="flex items-center justify-between mb-2"><span className="text-xs font-semibold uppercase tracking-wider" style={{color:C.inkSoft}}>Toplu Kalem Hesaplayıcı ({f.pb})</span>
+              <button onClick={()=>setKalem([...kalem,{ad:"",adet:"",fiyat:""}])} className="rounded-lg px-2 py-1 text-xs font-semibold" style={{border:`1px solid ${RENK.siparis}`,color:RENK.siparis}}>+ Satır</button></div>
+            {kalem.length===0&&<div className="text-xs mb-2" style={{color:C.inkSoft}}>Çok kalemli sipariş için "+ Satır" ekle: her satır ürün · adet · birim fiyat. Toplam otomatik hesaplanır.</div>}
+            {kalem.map((k,i)=>{const lt=parse(k.adet)*parse(k.fiyat); return(
+              <div key={i} className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                <input value={k.ad} onChange={e=>setKalem(kalem.map((x,j)=>j===i?{...x,ad:e.target.value}:x))} placeholder="ürün / beden" className="flex-1 min-w-[120px] rounded-lg px-2 py-1.5 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/>
+                <input value={k.adet} onChange={e=>setKalem(kalem.map((x,j)=>j===i?{...x,adet:fmtInput(e.target.value)}:x))} inputMode="decimal" placeholder="adet" className="w-16 rounded-lg px-2 py-1.5 text-sm text-right tabular-nums outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/>
+                <span className="text-xs" style={{color:C.inkSoft}}>×</span>
+                <input value={k.fiyat} onChange={e=>setKalem(kalem.map((x,j)=>j===i?{...x,fiyat:fmtInput(e.target.value)}:x))} inputMode="decimal" placeholder="birim" className="w-20 rounded-lg px-2 py-1.5 text-sm text-right tabular-nums outline-none" style={{border:`1px solid ${C.hair}`,background:C.surface}}/>
+                <span className="w-24 text-right text-sm font-medium tabular-nums" style={{color:C.ink}}>{lt>0?sym[f.pb]+sayi(lt):""}</span>
+                <button onClick={()=>setKalem(kalem.filter((_,j)=>j!==i))} className="p-1" title="Sil"><Trash2 size={14} color={C.gider}/></button>
+              </div>);})}
+            {kalem.length>0&&<div className="flex items-center justify-between mt-2 pt-2 border-t" style={{borderColor:C.hair}}>
+              <span className="text-sm font-semibold tabular-nums">Toplam: {sym[f.pb]}{sayi(kalemToplam)}</span>
+              <button onClick={kalemUygula} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{background:RENK.siparis}}>Açıklamaya ve Toplama Uygula</button>
+            </div>}
+          </div>
           <div><Lbl>Toplam</Lbl><div className="flex gap-1.5">
             <select value={f.pb} onChange={e=>pbDegis(e.target.value)} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${f.pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:f.pb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
             <input value={f.toplam} onChange={e=>setF({...f,toplam:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div></div>
@@ -1122,8 +1148,11 @@ function ShopierSiparisler({orders=[],kur,A,canDelete}){
 
 // === GİDER (kasadan anlık çıkışlar) ========================================
 function Gider({giderler=[],toplamGider,kur,A,canDelete}){
-  const [f,setF]=useState({aciklama:"",tutar:"",tarih:TODAY});
-  const ekle=async()=>{ const tutar=parse(f.tutar); if(tutar<=0) return; await A.addExpense({aciklama:f.aciklama.trim()||"Gider",amount:tutar,tarih:f.tarih}); setF({aciklama:"",tutar:"",tarih:f.tarih}); };
+  const [f,setF]=useState({aciklama:"",tutar:"",pb:"TL",tarih:TODAY});
+  const gCarpan=(x)=>x==="USD"?kur.usd:x==="EUR"?kur.eur:1;
+  const ekle=async()=>{ const tutar=parse(f.tutar)*gCarpan(f.pb); if(tutar<=0) return;
+    const not=f.pb!=="TL" ? `${f.aciklama.trim()||"Gider"} · ${{USD:"$",EUR:"€"}[f.pb]}${f.tutar}` : (f.aciklama.trim()||"Gider");
+    await A.addExpense({aciklama:not,amount:tutar,tarih:f.tarih}); setF({aciklama:"",tutar:"",pb:f.pb,tarih:f.tarih}); };
   const HIZLI=["Benzin","Yemek","Kira","Fatura","Nakliye","Personel"];
   const ayG={}; giderler.forEach(g=>{const a=(g.tarih||(g.created_at||"")).slice(0,7); if(!a)return; ayG[a]=(ayG[a]||0)+N(g.amount);});
   const ayListe=Object.entries(ayG).sort((a,b)=>a[0]<b[0]?1:-1);
@@ -1137,7 +1166,11 @@ function Gider({giderler=[],toplamGider,kur,A,canDelete}){
           <button key={h} onClick={()=>setF({...f,aciklama:h})} className="rounded-full px-3 py-1 text-xs font-medium" style={{background:f.aciklama===h?C.ink:"transparent",color:f.aciklama===h?"#fff":C.inkSoft,border:`1px solid ${f.aciklama===h?C.ink:C.hair}`}}>{h}</button>))}</div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
           <div className="md:col-span-2"><Lbl>Açıklama</Lbl><input value={f.aciklama} onChange={e=>setF({...f,aciklama:e.target.value})} placeholder="ör. benzin, yemek, nakliye" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
-          <div><Lbl>Tutar ₺</Lbl><input value={f.tutar} onChange={e=>setF({...f,tutar:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div><Lbl>Tutar</Lbl><div className="flex gap-1.5">
+            <select value={f.pb} onChange={e=>setF({...f,pb:e.target.value})} className="rounded-lg px-2 py-2 text-sm font-semibold outline-none" style={{border:`1px solid ${f.pb!=="TL"?C.gold:C.hair}`,background:C.paper,color:f.pb!=="TL"?C.gold:C.ink}}><option value="TL">₺</option><option value="USD">$</option><option value="EUR">€</option></select>
+            <input value={f.tutar} onChange={e=>setF({...f,tutar:fmtInput(e.target.value)})} inputMode="decimal" className="w-full rounded-lg px-3 py-2 text-sm outline-none tabular-nums" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+            {f.pb!=="TL"&&parse(f.tutar)>0&&<div className="text-xs tabular-nums mt-1" style={{color:C.inkSoft}}>≈ ₺{d2(parse(f.tutar)*gCarpan(f.pb))}</div>}
+          </div>
           <div><Lbl>Tarih</Lbl><div className="flex gap-1.5">
             <input type="date" value={f.tarih} onChange={e=>setF({...f,tarih:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/>
             <button onClick={ekle} className="whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gider}}>Ekle</button></div></div>
