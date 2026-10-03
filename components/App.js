@@ -67,7 +67,7 @@ const fmtInput=(s)=>{ if(s==null) return ""; s=String(s).replace(/[^\d,]/g,""); 
   let tam=i>=0?s.slice(0,i).replace(/,/g,""):s.replace(/,/g,""); let ond=i>=0?s.slice(i+1).replace(/,/g,""):null;
   tam=tam.replace(/^0+(?=\d)/,""); const grup=tam.replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ond!=null?(grup||"0")+","+ond:grup; };
 const KRITIK_ESIK=100; // 100 ve altı stok kritik sayılır
-const SURUM="v49"; // yayın sürümü — canlı kod bu mu diye kontrol için
+const SURUM="v50"; // yayın sürümü — canlı kod bu mu diye kontrol için
 const kritikMi=(u)=>N(u.stok)<=Math.max(N(u.min_stok),KRITIK_ESIK);
 const TODAY=db.todayISO();
 const TEDARIKCI_TURLERI=["Lastikçi","Kordoncu","Etiketçi","Jiletinci","Atölyeci","Baskıcı","İlikçi","Aksesuarcı","Nakliyeci"];
@@ -932,13 +932,14 @@ function SupplierScreen({grup,toplam,kur,suppliers,supplierMov,A,canDelete}){
 // === ÇEK / SENET ============================================================
 function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDelete}){
   const [ac,setAc]=useState(false);
-  const [f,setF]=useState({tip:"alinan",tur:"Çek",kisi:"",banka:"",tutar:"",pb:"TL",vade:TODAY,notu:""}); const [filtre,setFiltre]=useState("hepsi");
-  const [duzenle,setDuzenle]=useState(null);
+  const [f,setF]=useState({tip:"alinan",tur:"Çek",kisi:"",banka:"",tutar:"",pb:"TL",vade:TODAY,notu:"",foto:""}); const [filtre,setFiltre]=useState("hepsi");
+  const [duzenle,setDuzenle]=useState(null); const [yukleniyor,setYukleniyor]=useState(false); const [buyuk,setBuyuk]=useState(null);
+  const fotoSec=async(dosya,ata)=>{ if(!dosya)return; setYukleniyor(true); try{ const url=await db.uploadChequePhoto(dosya); ata(url); }catch(err){ alert(err.message||"Fotoğraf yüklenemedi"); } finally{ setYukleniyor(false); } };
   const toTr=(n)=>String(Math.round(Number(n)*100)/100).replace(".",",");
-  const duzenleAc=(c)=>setDuzenle({id:c.id,tip:c.tip,tur:c.tur,kisi:c.kisi,banka:c.banka==="—"?"":c.banka,pb:"TL",tutar:fmtInput(toTr(c.tutar)),vade:c.vade,notu:c.notu||""});
+  const duzenleAc=(c)=>setDuzenle({id:c.id,tip:c.tip,tur:c.tur,kisi:c.kisi,banka:c.banka==="—"?"":c.banka,pb:"TL",tutar:fmtInput(toTr(c.tutar)),vade:c.vade,notu:c.notu||"",foto:c.foto||""});
   const duzenleKaydet=async()=>{ const d=duzenle; if(!d.kisi.trim()||parse(d.tutar)<=0)return;
     const c=d.pb==="USD"?kur.usd:d.pb==="EUR"?kur.eur:1; const tutarTL=parse(d.tutar)*c;
-    await A.updateCheque(d.id,{tip:d.tip,tur:d.tur,kisi:d.kisi.trim(),banka:d.banka||"—",tutar:tutarTL,vade:d.vade,notu:d.notu||""});
+    await A.updateCheque(d.id,{tip:d.tip,tur:d.tur,kisi:d.kisi.trim(),banka:d.banka||"—",tutar:tutarTL,vade:d.vade,notu:d.notu||"",foto:d.foto||""});
     setDuzenle(null); };
   const DURUMLAR={alinan:["Portföyde","Tahsil Edildi","Ciro Edildi","Karşılıksız"],verilen:["Beklemede","Ödendi","Karşılıksız"]};
   const dR=(d)=>({"Portföyde":C.gold,"Beklemede":C.gold,"Tahsil Edildi":C.gelir,"Ödendi":C.gelir,"Ciro Edildi":C.inkSoft,"Karşılıksız":C.gider}[d]||C.inkSoft);
@@ -947,7 +948,7 @@ function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDel
   const ekle=async()=>{ if(!f.kisi.trim()||parse(f.tutar)<=0)return;
     const c=f.pb==="USD"?kur.usd:f.pb==="EUR"?kur.eur:1; const tutarTL=parse(f.tutar)*c;
     let notu=f.notu||""; if(f.pb!=="TL"){ const sym={TL:"₺",USD:"$",EUR:"€"}; const dn=`${sym[f.pb]}${f.tutar}`; notu=notu?`${notu} · ${dn}`:dn; }
-    await A.addCheque({tip:f.tip,tur:f.tur,kisi:f.kisi.trim(),banka:f.banka||"—",tutar:tutarTL,vade:f.vade,durum:f.tip==="alinan"?"Portföyde":"Beklemede",notu,islendi:false}); setF({tip:f.tip,tur:"Çek",kisi:"",banka:"",tutar:"",pb:f.pb,vade:TODAY,notu:""}); setAc(false); };
+    await A.addCheque({tip:f.tip,tur:f.tur,kisi:f.kisi.trim(),banka:f.banka||"—",tutar:tutarTL,vade:f.vade,durum:f.tip==="alinan"?"Portföyde":"Beklemede",notu,foto:f.foto||"",islendi:false}); setF({tip:f.tip,tur:"Çek",kisi:"",banka:"",tutar:"",pb:f.pb,vade:TODAY,notu:"",foto:""}); setAc(false); };
   const goster=[...cheques].filter(c=>filtre==="hepsi"||c.tip===filtre).sort((a,b)=>a.vade.localeCompare(b.vade));
   return (
     <div className="space-y-4">
@@ -974,6 +975,20 @@ function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDel
           </div>
           <div><Lbl>Vade</Lbl><input type="date" value={f.vade} onChange={e=>setF({...f,vade:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
           <Inp label="Açıklama" v={f.notu} set={v=>setF({...f,notu:v})} cls="col-span-2 md:col-span-3"/>
+          <div className="col-span-2 md:col-span-4"><Lbl>Çek / Senet Fotoğrafı (ops.)</Lbl>
+            <div className="flex items-center gap-3">
+              {f.foto
+                ? <img src={f.foto} alt="" onClick={()=>setBuyuk(f.foto)} className="h-16 w-16 rounded-lg object-cover cursor-zoom-in" style={{border:`1px solid ${C.hair}`}}/>
+                : <div className="flex h-16 w-16 items-center justify-center rounded-lg" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={18} color={C.inkSoft}/></div>}
+              <div className="flex flex-wrap gap-2">
+                <label className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,background:C.surface}}>
+                  {yukleniyor?"Yükleniyor…":f.foto?"Değiştir":"Fotoğraf Seç"}
+                  <input type="file" accept="image/*" className="hidden" disabled={yukleniyor} onChange={async e=>{const d=e.target.files?.[0]; e.target.value=""; await fotoSec(d,url=>setF(x=>({...x,foto:url})));}}/>
+                </label>
+                {f.foto&&<button onClick={()=>setF(x=>({...x,foto:""}))} className="rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.gider}}>Kaldır</button>}
+              </div>
+            </div>
+          </div>
         </div>
         <div className="flex justify-end mt-3"><button onClick={ekle} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Kaydet</button></div>
       </div>)}
@@ -983,7 +998,10 @@ function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDel
         {goster.map(c=>{const gecti=(c.durum==="Portföyde"||c.durum==="Beklemede")&&c.vade<TODAY; return(
           <Tr key={c.id}>
             <Td><span className="tabular-nums" style={{color:gecti?C.gider:C.inkSoft}}>{fTarih(c.vade)}</span>{gecti&&<div className="text-xs" style={{color:C.gider}}>vadesi geçti</div>}</Td>
-            <Td><div className="font-medium">{c.kisi}</div><div className="text-xs" style={{color:C.inkSoft}}>{c.tur}{c.notu?` · ${c.notu}`:""}</div></Td>
+            <Td><div className="flex items-center gap-2">
+              {c.foto&&<img src={c.foto} alt="" onClick={()=>setBuyuk(c.foto)} className="h-9 w-9 rounded object-cover cursor-zoom-in shrink-0" style={{border:`1px solid ${C.hair}`}} title="Fotoğrafı büyüt"/>}
+              <div className="min-w-0"><div className="font-medium">{c.kisi}</div><div className="text-xs" style={{color:C.inkSoft}}>{c.tur}{c.notu?` · ${c.notu}`:""}</div></div>
+            </div></Td>
             <Td><span style={{color:C.inkSoft}}>{c.banka}</span></Td>
             <Td r mono bold style={{color:c.tip==="alinan"?C.gelir:C.gider}}>{c.tip==="alinan"?"+":"−"}{tl(c.tutar)}<div className="text-xs font-normal" style={{color:C.inkSoft}}>{dov(c.tutar,kur)}</div></Td>
             <Td><Rozet renk={c.tip==="alinan"?C.gelir:C.gider} bg={c.tip==="alinan"?C.gelirBg:C.giderBg}>{c.tip==="alinan"?"alınan":"verilen"}</Rozet></Td>
@@ -1011,11 +1029,28 @@ function CekSenet({cheques,customers,suppliers,alinanCek,verilenCek,kur,A,canDel
           </div>
           <div><Lbl>Vade</Lbl><input type="date" value={duzenle.vade} onChange={e=>setDuzenle({...duzenle,vade:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
           <div className="col-span-2"><Lbl>Açıklama</Lbl><input value={duzenle.notu} onChange={e=>setDuzenle({...duzenle,notu:e.target.value})} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{border:`1px solid ${C.hair}`,background:C.paper}}/></div>
+          <div className="col-span-2"><Lbl>Çek / Senet Fotoğrafı (ops.)</Lbl>
+            <div className="flex items-center gap-3">
+              {duzenle.foto
+                ? <img src={duzenle.foto} alt="" onClick={()=>setBuyuk(duzenle.foto)} className="h-16 w-16 rounded-lg object-cover cursor-zoom-in" style={{border:`1px solid ${C.hair}`}}/>
+                : <div className="flex h-16 w-16 items-center justify-center rounded-lg" style={{border:`1px dashed ${C.hair}`,background:C.paper}}><ImageIcon size={18} color={C.inkSoft}/></div>}
+              <div className="flex flex-wrap gap-2">
+                <label className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,background:C.surface}}>
+                  {yukleniyor?"Yükleniyor…":duzenle.foto?"Değiştir":"Fotoğraf Seç"}
+                  <input type="file" accept="image/*" className="hidden" disabled={yukleniyor} onChange={async e=>{const d=e.target.files?.[0]; e.target.value=""; await fotoSec(d,url=>setDuzenle(x=>({...x,foto:url})));}}/>
+                </label>
+                {duzenle.foto&&<button onClick={()=>setDuzenle(x=>({...x,foto:""}))} className="rounded-lg px-3 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.gider}}>Kaldır</button>}
+              </div>
+            </div>
+          </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={()=>setDuzenle(null)} className="rounded-lg px-4 py-2 text-sm font-medium" style={{border:`1px solid ${C.hair}`,color:C.inkSoft}}>Vazgeç</button>
           <button onClick={duzenleKaydet} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{background:C.gelir}}>Güncelle</button>
         </div>
+      </Modal>)}
+      {buyuk&&(<Modal genis title="Çek / Senet Fotoğrafı" onClose={()=>setBuyuk(null)}>
+        <img src={buyuk} alt="" className="w-full rounded-xl object-contain" style={{maxHeight:"75vh",background:C.paper}}/>
       </Modal>)}
     </div>
   );
